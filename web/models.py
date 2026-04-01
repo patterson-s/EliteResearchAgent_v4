@@ -182,6 +182,138 @@ class OrgDetail(BaseModel):
     corpus_members: list[OrgCorpusMember] = []
 
 
+# ── Ontology ──────────────────────────────────────────────────────────────────
+
+class OntologyRun(BaseModel):
+    run_id: int
+    run_name: str
+    narrative: Optional[str] = None
+    evaluation_status: str
+    n_processed: Optional[int] = None
+    category: Optional[str] = None
+
+
+class OntologyQueueItem(BaseModel):
+    org_id: int
+    canonical_name: str
+    meta_type: Optional[str] = None
+    gov_canonical_tag: Optional[str] = None
+    gov_hierarchical_tags: Optional[list[str]] = None
+    location_country: Optional[str] = None
+    is_reviewed: bool = False
+    # Populated when already reviewed
+    mapping_id: Optional[int] = None
+    equivalence_class: Optional[str] = None
+    country_code: Optional[str] = None
+    destination_country: Optional[str] = None
+    destination_organization: Optional[str] = None
+    superior: Optional[str] = None
+    parent_category: Optional[str] = None
+    hierarchy_path: Optional[list[str]] = None
+    display_label: Optional[str] = None
+    annotation_notes: Optional[str] = None
+    region: Optional[str] = None
+
+
+class OntologyQueueResponse(BaseModel):
+    run_id: int
+    category: str
+    total: int
+    reviewed: int
+    remaining: int
+    items: list[OntologyQueueItem]
+
+
+class OntologyProgress(BaseModel):
+    run_id: int
+    category: str
+    total: int
+    reviewed: int
+    remaining: int
+
+
+class OntologyMappingCreate(BaseModel):
+    org_id: int
+    run_id: int
+    equivalence_class: str
+    country_code: Optional[str] = None
+    destination_country: Optional[str] = None
+    destination_organization: Optional[str] = None
+    superior: Optional[str] = None
+    parent_category: Optional[str] = None
+    hierarchy_path: Optional[list[str]] = None
+    display_label: Optional[str] = None
+    annotation_notes: Optional[str] = None
+    region: Optional[str] = None
+    new_class_label: Optional[str] = None  # if set, upserts a new user-defined class
+
+
+class OntologyMappingResponse(BaseModel):
+    mapping_id: int
+    org_id: int
+    run_id: int
+    equivalence_class: str
+    country_code: Optional[str] = None
+    destination_country: Optional[str] = None
+    destination_organization: Optional[str] = None
+    superior: Optional[str] = None
+    parent_category: Optional[str] = None
+    hierarchy_path: Optional[list[str]] = None
+    display_label: Optional[str] = None
+    annotation_notes: Optional[str] = None
+    region: Optional[str] = None
+    annotated_by: str
+
+
+class OntologyEquivalenceClass(BaseModel):
+    value: str
+    label: str
+    level: int  # 1=root, 2=branch, 3=sub-unit, 4+=user-defined
+    parent_class: Optional[str] = None  # needed for JS hierarchy computation
+
+
+class OntologyUserClass(BaseModel):
+    value: str
+    label: str
+    parent_class: str
+    category: str
+
+
+class OntologyOrgPosition(BaseModel):
+    person_id: int
+    display_name: str
+    hlp_name: str
+    title: str
+    time_start: Optional[int] = None
+    time_finish: Optional[int] = None
+
+
+class OntologyOrgContext(BaseModel):
+    org_id: int
+    match_type: str  # "direct" | "approximate" | "sibling" | "none"
+    positions: list[OntologyOrgPosition]
+
+
+class OrgSplitSpec(BaseModel):
+    new_canonical_name: str
+    titles: list[str]  # exact title strings to reassign to this new org
+
+
+class OrgSplitRequest(BaseModel):
+    splits: list[OrgSplitSpec]
+
+
+class OrgSplitNewOrg(BaseModel):
+    org_id: int
+    canonical_name: str
+    position_count: int
+
+
+class OrgSplitResult(BaseModel):
+    original_org_id: int
+    new_orgs: list[OrgSplitNewOrg]
+
+
 # ── Search ────────────────────────────────────────────────────────────────────
 
 class SearchResultItem(BaseModel):

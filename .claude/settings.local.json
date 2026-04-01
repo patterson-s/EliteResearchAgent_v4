@@ -74,7 +74,9 @@
       "Bash(curl -s \"http://localhost:8002/api/persons/1\")",
       "Bash(curl -s \"http://localhost:8002/api/persons?career_domain=political&limit=5\")",
       "Bash(C:/Users/spatt/anaconda3/envs/eliteresearchagent_v3/python.exe -c \"\nimport json\nwith open\\(r'C:/Users/spatt/Desktop/eliteresearchagent_v3/analysis/ideal_types/outputs/ideal_type_definitions.json'\\) as f:\n    d = json.load\\(f\\)\ntypes = d.get\\('ideal_types', []\\)\nprint\\('Ideal type fields per entry:'\\)\nprint\\(list\\(types[0].keys\\(\\)\\)\\)\nprint\\(\\)\nprint\\('Sample \\(first type\\):'\\)\nt = types[0]\nprint\\('code:', t['code']\\)\nprint\\('name:', t['name']\\)\nprint\\('description:', t['description'][:150]\\)\nprint\\('key_features:', t['key_features'][:2]\\)\nprint\\('pure_exemplars:', t['pure_exemplars']\\)\n\" 2>&1)",
-      "Bash(find C:UsersspattDesktopeliteresearchagent_v3 -name *Amre* -o -name *moussa*)"
+      "Bash(find C:UsersspattDesktopeliteresearchagent_v3 -name *Amre* -o -name *moussa*)",
+      "Bash(python db/migrate_12_create_org_ontology.py)",
+      "Bash(python db/migrate_13_user_classes.py)"
     ]
   }
 }
