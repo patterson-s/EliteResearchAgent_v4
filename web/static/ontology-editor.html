@@ -141,6 +141,25 @@ a { color: var(--accent); text-decoration: none; }
 .ctx-person { font-weight: 500; }
 .ctx-hlp { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
+/* ── Tag chip UI ──────────────────────────────────────────── */
+/* Visibility is controlled via JS inline styles (show: 'block', hide: 'none') */
+.tag-input-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.tag-input-row input { flex: 1; }
+.tag-input-row button {
+  padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  white-space: nowrap;
+}
+.tag-input-row button:hover { border-color: var(--accent); }
+.tag-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 24px; }
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--surface); border: 1px solid var(--accent);
+  border-radius: 12px; padding: 2px 10px; font-size: 12px; color: var(--accent);
+}
+.tag-chip .chip-remove { cursor: pointer; font-size: 14px; color: var(--muted); margin-left: 2px; }
+.tag-chip .chip-remove:hover { color: var(--danger); }
+
 /* ── Scrollbar ─────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -314,6 +333,27 @@ a { color: var(--accent); text-decoration: none; }
             <textarea class="form-input" id="f-notes" rows="2" placeholder="Optional annotation notes"></textarea>
           </div>
 
+          <label class="form-label" id="thematic-tags-label" style="display:none">Thematic tags</label>
+          <div id="thematic-tags-wrap" style="display:none">
+            <div class="tag-input-row">
+              <input id="f-tag-input" list="tag-suggestions"
+                     placeholder="Type a tag, press Enter or Add"
+                     autocomplete="off">
+              <datalist id="tag-suggestions"></datalist>
+              <button type="button" id="btn-add-tag">Add</button>
+            </div>
+            <div class="tag-chips" id="tag-chip-container"></div>
+            <div class="form-hint">Optional thematic labels — e.g. "development", "security".</div>
+          </div>
+
+          <label class="form-label" for="f-parent-org">Parent org</label>
+          <div>
+            <input class="form-input" id="f-parent-org" list="parent-org-list"
+                   placeholder="e.g. World Bank Group" autocomplete="off">
+            <datalist id="parent-org-list"></datalist>
+            <div class="form-hint">Immediate parent institution — e.g. "World Bank Group" for a World Bank panel.</div>
+          </div>
+
         </div>
 
         <div class="action-bar">
@@ -347,7 +387,10 @@ let state = {
   activeIdx: null,    // index into queue
   equivalenceClasses: [],
   countries: [],
+  parentOrgSuggestions: new Set(),
 };
+
+let currentTags = [];   // thematic tags for the currently-selected org
 
 // Categories that stop context cascade at Tier 1 (direct FK only — no phrase/sibling fallback)
 const DIRECT_ONLY_CONTEXT_CATEGORIES = new Set(['io_non_un']);
@@ -381,6 +424,11 @@ const DEFAULT_PARENT = {
   un_specialized_agency:          'intergovernmental_organization',
   intergovernmental_panel:        'intergovernmental_organization',
 };
+
+// Snapshot of hardcoded class values — taken after DEFAULT_PARENT is fully defined,
+// before loadEquivalenceClasses() adds user classes to it.
+const HARDCODED_CLASSES = new Set(Object.keys(DEFAULT_PARENT));
+
 const GRANDPARENT = {
   // MFA level-3
   embassy:                   'national_government',
@@ -435,10 +483,16 @@ async function loadRuns() {
     state.category = sel.options[sel.selectedIndex].dataset.category || null;
     state.activeIdx = null;
     updateExcludeButton();
+    updateTagFieldVisibility();
+    loadTagSuggestions();
+    loadParentOrgSuggestions();
     loadEquivalenceClasses().then(loadQueue);
   });
   await loadEquivalenceClasses();
   updateExcludeButton();
+  updateTagFieldVisibility();
+  await loadTagSuggestions();
+  await loadParentOrgSuggestions();
   await loadQueue();
 }
 
@@ -578,7 +632,22 @@ function selectOrg(idx) {
   // Populate form fields
   const parentSel = document.getElementById('f-parent');
   parentSel.dataset.userSet = '';  // reset override flag for new org
-  document.getElementById('f-eq-class').value = item.equivalence_class || '';
+
+  // If the stored equivalence_class is user-defined (not in hardcoded set) and has a
+  // parent_category, restore it as parent in the eq-class dropdown + label in sub-class field.
+  const storedClass = item.equivalence_class || '';
+  const isUserSubclass = storedClass && !HARDCODED_CLASSES.has(storedClass) && item.parent_category;
+  if (isUserSubclass) {
+    const userCls = (state.equivalenceClasses || []).find(c => c.value === storedClass);
+    document.getElementById('f-eq-class').value = item.parent_category;
+    document.getElementById('f-subclass-label').value = userCls ? userCls.label : storedClass;
+    document.getElementById('f-subclass-preview').textContent = `Existing class: ${storedClass}`;
+  } else {
+    document.getElementById('f-eq-class').value = storedClass;
+    document.getElementById('f-subclass-label').value = '';
+    document.getElementById('f-subclass-preview').textContent = '';
+  }
+
   document.getElementById('f-region').value = item.region || '';
   document.getElementById('f-country').value = item.country_code || item.location_country || '';
   document.getElementById('f-destination').value = item.destination_country || '';
@@ -588,7 +657,12 @@ function selectOrg(idx) {
   parentSel.value = item.parent_category || DEFAULT_PARENT[item.equivalence_class] || '';
   document.getElementById('f-label').value = item.display_label || '';
   document.getElementById('f-notes').value = item.annotation_notes || '';
+  // Restore thematic tags and parent org for already-reviewed orgs
+  currentTags = Array.isArray(item.thematic_tags) ? [...item.thematic_tags] : (item.thematic_tags || []);
+  renderTagChips();
+  document.getElementById('f-parent-org').value = item.parent_org || '';
   updateHierarchyDisplay();
+  updateSubclassField();
 
   // Un-review button
   const unreviewWrap = document.getElementById('unreview-wrap');
@@ -800,6 +874,65 @@ function onSubclassInput() {
   updateHierarchyDisplay();
 }
 
+// ── Tag chip management ───────────────────────────────────────────────────
+function renderTagChips() {
+  const container = document.getElementById('tag-chip-container');
+  container.innerHTML = '';
+  currentTags.forEach((tag, idx) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `${esc(tag)}<span class="chip-remove" data-idx="${idx}" title="Remove">×</span>`;
+    chip.querySelector('.chip-remove').addEventListener('click', () => {
+      currentTags.splice(idx, 1);
+      renderTagChips();
+    });
+    container.appendChild(chip);
+  });
+}
+
+function addTag(raw) {
+  const tag = raw.trim().toLowerCase().replace(/\s+/g, '_');
+  if (!tag || currentTags.includes(tag)) return;
+  currentTags.push(tag);
+  renderTagChips();
+  document.getElementById('f-tag-input').value = '';
+}
+
+async function loadTagSuggestions() {
+  if (state.category !== 'io_non_un' || !state.runId) return;
+  const data = await apiFetch(
+    `/api/ontology/autocomplete/thematic-tags?category=${state.category}&run_id=${state.runId}`
+  );
+  if (!Array.isArray(data)) return;
+  const dl = document.getElementById('tag-suggestions');
+  dl.innerHTML = data.map(t => `<option value="${esc(t)}">`).join('');
+}
+
+function updateTagFieldVisibility() {
+  const show = (state.category === 'io_non_un');
+  document.getElementById('thematic-tags-label').style.display = show ? 'block' : 'none';
+  document.getElementById('thematic-tags-wrap').style.display  = show ? 'block' : 'none';
+}
+
+// ── Parent org suggestions ────────────────────────────────────────────────
+async function loadParentOrgSuggestions() {
+  if (!state.runId) return;
+  const data = await apiFetch(
+    `/api/ontology/autocomplete/parent-orgs?run_id=${state.runId}`
+  );
+  if (!Array.isArray(data)) return;
+  state.parentOrgSuggestions = new Set(data);
+  renderParentOrgDatalist();
+}
+
+function renderParentOrgDatalist() {
+  const dl = document.getElementById('parent-org-list');
+  dl.innerHTML = [...state.parentOrgSuggestions]
+    .sort()
+    .map(v => `<option value="${esc(v)}">`)
+    .join('');
+}
+
 // ── Save ──────────────────────────────────────────────────────────────────
 async function saveCurrentOrg(advanceNext = true) {
   if (state.activeIdx === null) return;
@@ -845,6 +978,8 @@ async function saveCurrentOrg(advanceNext = true) {
     display_label:       document.getElementById('f-label').value.trim() || null,
     annotation_notes:    document.getElementById('f-notes').value.trim() || null,
     region:              document.getElementById('f-region').value.trim() || null,
+    thematic_tags:       currentTags,
+    parent_org:          document.getElementById('f-parent-org').value.trim() || null,
     new_class_label:     newClassLabel,
   };
 
@@ -869,11 +1004,24 @@ async function saveCurrentOrg(advanceNext = true) {
     display_label:       result.display_label,
     annotation_notes:    result.annotation_notes,
     region:              result.region,
+    thematic_tags:       result.thematic_tags || [],
+    parent_org:          result.parent_org,
   });
 
   if (!wasReviewed) { state.reviewed++; updateProgress(); }
   renderQueue();
   showSaveStatus('Saved');
+
+  // Immediately add new parent_org value to local suggestions — no API round-trip needed.
+  const savedParentOrg = result.parent_org;
+  if (savedParentOrg && !state.parentOrgSuggestions.has(savedParentOrg)) {
+    state.parentOrgSuggestions.add(savedParentOrg);
+    renderParentOrgDatalist();
+  }
+
+  // If a new user-defined sub-class was created, refresh the class list so
+  // selectOrg can correctly reverse it back to parent + sub-class on return.
+  if (newClassLabel) await loadEquivalenceClasses();
 
   if (advanceNext) advanceToNext();
 }
@@ -933,6 +1081,14 @@ document.getElementById('btn-exclude').addEventListener('click', async () => {
 document.getElementById('btn-unreview').addEventListener('click', async () => {
   const mappingId = document.getElementById('btn-unreview').dataset.mappingId;
   if (mappingId) await deleteMapping(parseInt(mappingId));
+});
+
+// Tag input event listeners
+document.getElementById('f-tag-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addTag(e.target.value); }
+});
+document.getElementById('btn-add-tag').addEventListener('click', () => {
+  addTag(document.getElementById('f-tag-input').value);
 });
 
 // Auto-update display label suggestion when class + country change

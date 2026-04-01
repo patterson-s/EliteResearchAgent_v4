@@ -213,6 +213,8 @@ class OntologyQueueItem(BaseModel):
     display_label: Optional[str] = None
     annotation_notes: Optional[str] = None
     region: Optional[str] = None
+    thematic_tags: Optional[list[str]] = None
+    parent_org: Optional[str] = None
 
 
 class OntologyQueueResponse(BaseModel):
@@ -245,6 +247,8 @@ class OntologyMappingCreate(BaseModel):
     display_label: Optional[str] = None
     annotation_notes: Optional[str] = None
     region: Optional[str] = None
+    thematic_tags: Optional[list[str]] = None
+    parent_org: Optional[str] = None
     new_class_label: Optional[str] = None  # if set, upserts a new user-defined class
 
 
@@ -262,6 +266,8 @@ class OntologyMappingResponse(BaseModel):
     display_label: Optional[str] = None
     annotation_notes: Optional[str] = None
     region: Optional[str] = None
+    thematic_tags: Optional[list[str]] = None
+    parent_org: Optional[str] = None
     annotated_by: str
 
 

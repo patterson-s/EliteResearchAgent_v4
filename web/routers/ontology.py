@@ -189,6 +189,17 @@ CATEGORY_CONFIG: dict[str, dict] = {
 }
 
 
+_SEED_TAGS: dict[str, list[str]] = {
+    "io_non_un": [
+        "agriculture", "aviation", "communications", "development",
+        "education", "energy", "environment", "finance", "health",
+        "humanitarian", "human_rights", "intellectual_property",
+        "labor", "maritime", "migration", "nuclear", "peacekeeping",
+        "regional_integration", "security", "trade",
+    ],
+}
+
+
 def _get_category(category: str) -> dict:
     cfg = CATEGORY_CONFIG.get(category)
     if not cfg:
@@ -235,7 +246,8 @@ def get_queue(
             oom.mapping_id, oom.equivalence_class, oom.country_code,
             oom.destination_country, oom.destination_organization, oom.superior,
             oom.parent_category, oom.hierarchy_path, oom.display_label,
-            oom.annotation_notes, oom.region
+            oom.annotation_notes, oom.region, COALESCE(oom.thematic_tags, ARRAY[]::TEXT[]) AS thematic_tags,
+            oom.parent_org
         FROM prosopography.organizations o
         LEFT JOIN prosopography.org_ontology_mappings oom
             ON oom.org_id = o.org_id AND oom.run_id = %(run_id)s
@@ -353,6 +365,53 @@ def get_equivalence_classes(category: Optional[str] = Query(None)):
     return result
 
 
+@router.get("/autocomplete/thematic-tags", response_model=list[str])
+def get_thematic_tag_suggestions(
+    category: Optional[str] = Query(None),
+    run_id: Optional[int] = Query(None),
+):
+    """Return seed tags + all distinct tags used in this run, merged, deduplicated, sorted."""
+    seeds = _SEED_TAGS.get(category or "", [])
+    used: list[str] = []
+    if run_id:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT DISTINCT unnest(thematic_tags) AS tag
+                FROM prosopography.org_ontology_mappings
+                WHERE run_id = %(run_id)s AND cardinality(thematic_tags) > 0
+                ORDER BY tag
+            """, {"run_id": run_id})
+            used = [r[0] for r in cur.fetchall()]
+            cur.close()
+    return sorted(set(seeds) | set(used))
+
+
+@router.get("/autocomplete/parent-orgs", response_model=list[str])
+def get_parent_org_suggestions(run_id: Optional[int] = Query(None)):
+    """Return distinct parent_org values used in this run + canonical names of IO orgs."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        used: list[str] = []
+        if run_id:
+            cur.execute("""
+                SELECT DISTINCT parent_org
+                FROM prosopography.org_ontology_mappings
+                WHERE run_id = %(run_id)s AND parent_org IS NOT NULL
+                ORDER BY parent_org
+            """, {"run_id": run_id})
+            used = [r[0] for r in cur.fetchall()]
+        cur.execute("""
+            SELECT DISTINCT canonical_name
+            FROM prosopography.organizations
+            WHERE meta_type = 'io'
+            ORDER BY canonical_name
+        """)
+        io_names = [r[0] for r in cur.fetchall()]
+        cur.close()
+    return sorted(set(used) | set(io_names))
+
+
 @router.get("/autocomplete/countries", response_model=list[str])
 def get_countries():
     with get_conn() as conn:
@@ -379,12 +438,12 @@ def save_mapping(body: OntologyMappingCreate):
             INSERT INTO prosopography.org_ontology_mappings (
                 org_id, run_id, equivalence_class, country_code, destination_country,
                 destination_organization, superior, parent_category, hierarchy_path,
-                display_label, annotation_notes, region, annotated_by, updated_at
+                display_label, annotation_notes, region, thematic_tags, parent_org, annotated_by, updated_at
             )
             VALUES (
                 %(org_id)s, %(run_id)s, %(equivalence_class)s, %(country_code)s, %(destination_country)s,
                 %(destination_organization)s, %(superior)s, %(parent_category)s, %(hierarchy_path)s,
-                %(display_label)s, %(annotation_notes)s, %(region)s, 'manual', now()
+                %(display_label)s, %(annotation_notes)s, %(region)s, %(thematic_tags)s::TEXT[], %(parent_org)s, 'manual', now()
             )
             ON CONFLICT (org_id, run_id) DO UPDATE SET
                 equivalence_class        = EXCLUDED.equivalence_class,
@@ -397,11 +456,13 @@ def save_mapping(body: OntologyMappingCreate):
                 display_label            = EXCLUDED.display_label,
                 annotation_notes         = EXCLUDED.annotation_notes,
                 region                   = EXCLUDED.region,
+                thematic_tags            = EXCLUDED.thematic_tags,
+                parent_org               = EXCLUDED.parent_org,
                 updated_at               = now()
             RETURNING
                 mapping_id, org_id, run_id, equivalence_class, country_code, destination_country,
                 destination_organization, superior, parent_category, hierarchy_path,
-                display_label, annotation_notes, region, annotated_by
+                display_label, annotation_notes, region, thematic_tags, parent_org, annotated_by
         """, {
             "org_id":                    body.org_id,
             "run_id":                    body.run_id,
@@ -415,6 +476,8 @@ def save_mapping(body: OntologyMappingCreate):
             "display_label":             body.display_label,
             "annotation_notes":          body.annotation_notes,
             "region":                    body.region,
+            "thematic_tags":             body.thematic_tags or [],
+            "parent_org":                body.parent_org,
         })
         row = row_to_dict(cur, cur.fetchone())
 
