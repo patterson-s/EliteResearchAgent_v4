@@ -32,7 +32,7 @@ def list_organizations(
     meta_type: Optional[str] = Query(None),
     sector: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
-    limit: int = Query(50, le=200),
+    limit: int = Query(50, le=2000),
     offset: int = Query(0),
 ):
     params = {"meta_type": meta_type, "sector": sector, "q": q, "limit": limit, "offset": offset}

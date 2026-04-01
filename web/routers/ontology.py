@@ -25,6 +25,15 @@ from web.models import (
     OrgSplitResult,
     OrgSplitNewOrg,
     OntologyUserClass,
+    ParentOrgCandidate,
+    ParentOrgResolutionItem,
+    ParentOrgResolutionQueue,
+    ParentOrgResolveRequest,
+    ParentOrgResolveResponse,
+    OntologyReviewItem,
+    OntologyReviewResponse,
+    OntologyMappingPatch,
+    OntologyRunFinalizeResponse,
 )
 
 router = APIRouter()
@@ -247,7 +256,7 @@ def get_queue(
             oom.destination_country, oom.destination_organization, oom.superior,
             oom.parent_category, oom.hierarchy_path, oom.display_label,
             oom.annotation_notes, oom.region, COALESCE(oom.thematic_tags, ARRAY[]::TEXT[]) AS thematic_tags,
-            oom.parent_org
+            oom.parent_org, oom.parent_org_id
         FROM prosopography.organizations o
         LEFT JOIN prosopography.org_ontology_mappings oom
             ON oom.org_id = o.org_id AND oom.run_id = %(run_id)s
@@ -438,12 +447,14 @@ def save_mapping(body: OntologyMappingCreate):
             INSERT INTO prosopography.org_ontology_mappings (
                 org_id, run_id, equivalence_class, country_code, destination_country,
                 destination_organization, superior, parent_category, hierarchy_path,
-                display_label, annotation_notes, region, thematic_tags, parent_org, annotated_by, updated_at
+                display_label, annotation_notes, region, thematic_tags,
+                parent_org, parent_org_id, annotated_by, updated_at
             )
             VALUES (
                 %(org_id)s, %(run_id)s, %(equivalence_class)s, %(country_code)s, %(destination_country)s,
                 %(destination_organization)s, %(superior)s, %(parent_category)s, %(hierarchy_path)s,
-                %(display_label)s, %(annotation_notes)s, %(region)s, %(thematic_tags)s::TEXT[], %(parent_org)s, 'manual', now()
+                %(display_label)s, %(annotation_notes)s, %(region)s, %(thematic_tags)s::TEXT[],
+                %(parent_org)s, %(parent_org_id)s, 'manual', now()
             )
             ON CONFLICT (org_id, run_id) DO UPDATE SET
                 equivalence_class        = EXCLUDED.equivalence_class,
@@ -458,11 +469,14 @@ def save_mapping(body: OntologyMappingCreate):
                 region                   = EXCLUDED.region,
                 thematic_tags            = EXCLUDED.thematic_tags,
                 parent_org               = EXCLUDED.parent_org,
+                parent_org_id            = COALESCE(EXCLUDED.parent_org_id,
+                                                     org_ontology_mappings.parent_org_id),
                 updated_at               = now()
             RETURNING
                 mapping_id, org_id, run_id, equivalence_class, country_code, destination_country,
                 destination_organization, superior, parent_category, hierarchy_path,
-                display_label, annotation_notes, region, thematic_tags, parent_org, annotated_by
+                display_label, annotation_notes, region, thematic_tags,
+                parent_org, parent_org_id, annotated_by
         """, {
             "org_id":                    body.org_id,
             "run_id":                    body.run_id,
@@ -478,6 +492,7 @@ def save_mapping(body: OntologyMappingCreate):
             "region":                    body.region,
             "thematic_tags":             body.thematic_tags or [],
             "parent_org":                body.parent_org,
+            "parent_org_id":             body.parent_org_id,
         })
         row = row_to_dict(cur, cur.fetchone())
 
@@ -679,6 +694,288 @@ def split_org(org_id: int, req: OrgSplitRequest):
         cur.close()
 
     return OrgSplitResult(original_org_id=org_id, new_orgs=new_orgs)
+
+
+@router.get("/resolution-queue", response_model=ParentOrgResolutionQueue)
+def get_resolution_queue(run_id: int = Query(...)):
+    """Return unique unresolved parent_org text values for a run, with candidate org matches."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT COUNT(DISTINCT parent_org)
+            FROM prosopography.org_ontology_mappings
+            WHERE run_id = %(run_id)s
+              AND parent_org IS NOT NULL
+              AND parent_org_id IS NOT NULL
+        """, {"run_id": run_id})
+        total_resolved = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT parent_org AS parent_org_text, COUNT(*) AS mapping_count
+            FROM prosopography.org_ontology_mappings
+            WHERE run_id = %(run_id)s
+              AND parent_org IS NOT NULL
+              AND parent_org_id IS NULL
+            GROUP BY parent_org
+            ORDER BY COUNT(*) DESC, parent_org
+        """, {"run_id": run_id})
+        unresolved_rows = cur.fetchall()
+
+        items = []
+        for (text, count) in unresolved_rows:
+            stripped = re.sub(r'\s*\([^)]*\)\s*$', '', text).strip()
+            cur.execute("""
+                (SELECT DISTINCT o.org_id, o.canonical_name, 'exact_name' AS match_method
+                 FROM prosopography.organizations o
+                 WHERE o.canonical_name ILIKE %(text)s)
+                UNION
+                (SELECT DISTINCT o.org_id, o.canonical_name, 'alias' AS match_method
+                 FROM prosopography.organization_aliases oa
+                 JOIN prosopography.organizations o ON o.org_id = oa.org_id
+                 WHERE oa.alias ILIKE %(text)s)
+                UNION
+                (SELECT DISTINCT o.org_id, o.canonical_name, 'stripped' AS match_method
+                 FROM prosopography.organizations o
+                 WHERE %(stripped)s != %(text)s AND o.canonical_name ILIKE %(stripped)s)
+                LIMIT 8
+            """, {"text": text, "stripped": stripped})
+            _method_order = {"exact_name": 0, "alias": 1, "stripped": 2}
+            suggestions = sorted(
+                [ParentOrgCandidate(org_id=r[0], canonical_name=r[1], match_method=r[2])
+                 for r in cur.fetchall()],
+                key=lambda s: _method_order.get(s.match_method, 9),
+            )
+            items.append(ParentOrgResolutionItem(
+                parent_org_text=text,
+                mapping_count=count,
+                suggestions=suggestions,
+            ))
+
+        cur.close()
+
+    return ParentOrgResolutionQueue(
+        run_id=run_id,
+        total_resolved=total_resolved,
+        total_unresolved=len(unresolved_rows),
+        items=items,
+    )
+
+
+@router.post("/resolve-parent-org", response_model=ParentOrgResolveResponse)
+def resolve_parent_org(body: ParentOrgResolveRequest):
+    """Set parent_org_id FK on all mappings in this run that share the given parent_org text."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT canonical_name FROM prosopography.organizations WHERE org_id = %(org_id)s
+        """, {"org_id": body.parent_org_id})
+        org_row = cur.fetchone()
+        if not org_row:
+            raise HTTPException(status_code=404, detail=f"Organization {body.parent_org_id} not found.")
+        org_canonical_name = org_row[0]
+
+        cur.execute("""
+            UPDATE prosopography.org_ontology_mappings
+            SET parent_org_id = %(parent_org_id)s, updated_at = now()
+            WHERE run_id = %(run_id)s
+              AND parent_org = %(parent_org_text)s
+              AND parent_org_id IS NULL
+        """, {
+            "parent_org_id":   body.parent_org_id,
+            "run_id":          body.run_id,
+            "parent_org_text": body.parent_org_text,
+        })
+        updated_count = cur.rowcount
+        conn.commit()
+        cur.close()
+
+    return ParentOrgResolveResponse(
+        updated_count=updated_count,
+        parent_org_text=body.parent_org_text,
+        parent_org_id=body.parent_org_id,
+        org_canonical_name=org_canonical_name,
+    )
+
+
+@router.get("/review", response_model=OntologyReviewResponse)
+def get_review(run_id: int = Query(...)):
+    """Return all annotations for a run with per-item review_status and approval stats."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT run_id, run_name, evaluation_status
+            FROM prosopography.derivative_runs WHERE run_id = %(run_id)s
+        """, {"run_id": run_id})
+        run_row = cur.fetchone()
+        if not run_row:
+            raise HTTPException(status_code=404, detail=f"Run {run_id} not found.")
+        run_name, evaluation_status = run_row[1], run_row[2]
+
+        cur.execute("""
+            SELECT
+                oom.mapping_id, o.org_id, o.canonical_name,
+                oom.equivalence_class, oom.parent_category, oom.hierarchy_path,
+                oom.parent_org, oom.parent_org_id,
+                parent_o.canonical_name AS parent_org_resolved,
+                oom.region,
+                COALESCE(oom.thematic_tags, ARRAY[]::TEXT[]) AS thematic_tags,
+                oom.annotation_notes, oom.review_status
+            FROM prosopography.org_ontology_mappings oom
+            JOIN prosopography.organizations o ON o.org_id = oom.org_id
+            LEFT JOIN prosopography.organizations parent_o ON parent_o.org_id = oom.parent_org_id
+            WHERE oom.run_id = %(run_id)s
+            ORDER BY
+                CASE oom.review_status WHEN 'pending' THEN 0 WHEN 'flagged' THEN 1 ELSE 2 END,
+                o.canonical_name
+        """, {"run_id": run_id})
+        rows = rows_to_dicts(cur)
+
+        cur.execute("""
+            SELECT review_status, COUNT(*) FROM prosopography.org_ontology_mappings
+            WHERE run_id = %(run_id)s GROUP BY review_status
+        """, {"run_id": run_id})
+        counts = {r[0]: r[1] for r in cur.fetchall()}
+        cur.close()
+
+    items = [OntologyReviewItem(**r) for r in rows]
+    return OntologyReviewResponse(
+        run_id=run_id,
+        run_name=run_name,
+        evaluation_status=evaluation_status,
+        total=len(items),
+        approved=counts.get("approved", 0),
+        flagged=counts.get("flagged", 0),
+        pending=counts.get("pending", 0),
+        items=items,
+    )
+
+
+@router.patch("/mappings/{mapping_id}", response_model=OntologyMappingPatch)
+def patch_mapping(mapping_id: int, body: OntologyMappingPatch):
+    """Partial update of a mapping. Only fields present in the request body are updated.
+    If equivalence_class or parent_category are included, hierarchy_path is recomputed.
+    """
+    fields = body.model_fields_set
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields provided to update.")
+
+    # Allowed column names — all hardcoded, no injection risk
+    _allowed = {
+        "equivalence_class", "parent_category", "parent_org", "parent_org_id",
+        "region", "thematic_tags", "annotation_notes", "review_status",
+    }
+    set_parts = []
+    params: dict = {"mapping_id": mapping_id}
+
+    for field in fields:
+        if field not in _allowed:
+            continue
+        val = getattr(body, field)
+        if field == "thematic_tags":
+            set_parts.append(f"{field} = %({field})s::TEXT[]")
+            params[field] = val or []
+        else:
+            set_parts.append(f"{field} = %({field})s")
+            params[field] = val
+
+    # Recompute hierarchy_path whenever eq_class or parent_category is touched
+    if "equivalence_class" in fields or "parent_category" in fields:
+        # Fetch current values for whichever wasn't provided
+        with get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT equivalence_class, parent_category
+                FROM prosopography.org_ontology_mappings WHERE mapping_id = %(mid)s
+            """, {"mid": mapping_id})
+            cur_row = cur.fetchone()
+            cur.close()
+        if cur_row:
+            eq = body.equivalence_class if "equivalence_class" in fields else cur_row[0]
+            pc = body.parent_category if "parent_category" in fields else cur_row[1]
+            hp = _compute_hierarchy_path(eq, pc)
+            set_parts.append("hierarchy_path = %(hierarchy_path)s")
+            params["hierarchy_path"] = hp
+
+    if not set_parts:
+        raise HTTPException(status_code=400, detail="No valid fields to update.")
+
+    set_clause = ", ".join(set_parts)
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(f"""
+            UPDATE prosopography.org_ontology_mappings
+            SET {set_clause}, updated_at = now()
+            WHERE mapping_id = %(mapping_id)s
+            RETURNING *
+        """, params)
+        row = cur.fetchone()
+        if not row:
+            cur.close()
+            raise HTTPException(status_code=404, detail="Mapping not found.")
+        # Build a dict from the row using column names
+        cols = [d[0] for d in cur.description]
+        result = dict(zip(cols, row))
+        conn.commit()
+        cur.close()
+
+    # Return only the patch-relevant fields so the model validates cleanly
+    return OntologyMappingPatch(
+        equivalence_class=result.get("equivalence_class"),
+        parent_category=result.get("parent_category"),
+        parent_org=result.get("parent_org"),
+        parent_org_id=result.get("parent_org_id"),
+        region=result.get("region"),
+        thematic_tags=result.get("thematic_tags") or [],
+        annotation_notes=result.get("annotation_notes"),
+        review_status=result.get("review_status"),
+    )
+
+
+@router.post("/runs/{run_id}/finalize", response_model=OntologyRunFinalizeResponse)
+def finalize_run(run_id: int):
+    """Set a run's evaluation_status to 'validated'.
+    Blocked if any annotations are still 'pending'.
+    """
+    with get_conn() as conn:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT COUNT(*) FROM prosopography.org_ontology_mappings
+            WHERE run_id = %(run_id)s AND review_status = 'pending'
+        """, {"run_id": run_id})
+        pending_count = cur.fetchone()[0]
+
+        if pending_count > 0:
+            cur.close()
+            return OntologyRunFinalizeResponse(
+                run_id=run_id,
+                evaluation_status="reviewed",
+                pending_count=pending_count,
+                message=f"{pending_count} annotation(s) still pending. Review all items before finalizing.",
+            )
+
+        cur.execute("""
+            UPDATE prosopography.derivative_runs
+            SET evaluation_status = 'validated'
+            WHERE run_id = %(run_id)s
+            RETURNING evaluation_status
+        """, {"run_id": run_id})
+        row = cur.fetchone()
+        if not row:
+            cur.close()
+            raise HTTPException(status_code=404, detail=f"Run {run_id} not found.")
+        conn.commit()
+        cur.close()
+
+    return OntologyRunFinalizeResponse(
+        run_id=run_id,
+        evaluation_status="validated",
+        pending_count=0,
+        message="Run validated successfully.",
+    )
 
 
 @router.delete("/mappings/{mapping_id}", status_code=204)

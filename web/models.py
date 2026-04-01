@@ -215,6 +215,7 @@ class OntologyQueueItem(BaseModel):
     region: Optional[str] = None
     thematic_tags: Optional[list[str]] = None
     parent_org: Optional[str] = None
+    parent_org_id: Optional[int] = None
 
 
 class OntologyQueueResponse(BaseModel):
@@ -249,6 +250,7 @@ class OntologyMappingCreate(BaseModel):
     region: Optional[str] = None
     thematic_tags: Optional[list[str]] = None
     parent_org: Optional[str] = None
+    parent_org_id: Optional[int] = None
     new_class_label: Optional[str] = None  # if set, upserts a new user-defined class
 
 
@@ -268,6 +270,7 @@ class OntologyMappingResponse(BaseModel):
     region: Optional[str] = None
     thematic_tags: Optional[list[str]] = None
     parent_org: Optional[str] = None
+    parent_org_id: Optional[int] = None
     annotated_by: str
 
 
@@ -283,6 +286,83 @@ class OntologyUserClass(BaseModel):
     label: str
     parent_class: str
     category: str
+
+
+class ParentOrgCandidate(BaseModel):
+    org_id: int
+    canonical_name: str
+    match_method: str  # "exact_name" | "alias" | "stripped"
+
+
+class ParentOrgResolutionItem(BaseModel):
+    parent_org_text: str
+    mapping_count: int
+    suggestions: list[ParentOrgCandidate]
+
+
+class ParentOrgResolutionQueue(BaseModel):
+    run_id: int
+    total_resolved: int
+    total_unresolved: int
+    items: list[ParentOrgResolutionItem]
+
+
+class ParentOrgResolveRequest(BaseModel):
+    run_id: int
+    parent_org_text: str
+    parent_org_id: int
+
+
+class ParentOrgResolveResponse(BaseModel):
+    updated_count: int
+    parent_org_text: str
+    parent_org_id: int
+    org_canonical_name: str
+
+
+class OntologyReviewItem(BaseModel):
+    mapping_id: int
+    org_id: int
+    canonical_name: str
+    equivalence_class: str
+    parent_category: Optional[str] = None
+    hierarchy_path: Optional[list[str]] = None
+    parent_org: Optional[str] = None
+    parent_org_id: Optional[int] = None
+    parent_org_resolved: Optional[str] = None  # canonical_name of resolved parent org
+    region: Optional[str] = None
+    thematic_tags: Optional[list[str]] = None
+    annotation_notes: Optional[str] = None
+    review_status: str = 'pending'
+
+
+class OntologyReviewResponse(BaseModel):
+    run_id: int
+    run_name: str
+    evaluation_status: str
+    total: int
+    approved: int
+    flagged: int
+    pending: int
+    items: list[OntologyReviewItem]
+
+
+class OntologyMappingPatch(BaseModel):
+    equivalence_class: Optional[str] = None
+    parent_category: Optional[str] = None
+    parent_org: Optional[str] = None
+    parent_org_id: Optional[int] = None
+    region: Optional[str] = None
+    thematic_tags: Optional[list[str]] = None
+    annotation_notes: Optional[str] = None
+    review_status: Optional[str] = None  # 'pending' | 'approved' | 'flagged'
+
+
+class OntologyRunFinalizeResponse(BaseModel):
+    run_id: int
+    evaluation_status: str
+    pending_count: int  # 0 on success; >0 if blocked
+    message: str
 
 
 class OntologyOrgPosition(BaseModel):

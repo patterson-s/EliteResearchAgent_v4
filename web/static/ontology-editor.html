@@ -164,6 +164,94 @@ a { color: var(--accent); text-decoration: none; }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Mode tabs ─────────────────────────────────────────────── */
+.mode-tabs { display: flex; gap: 4px; }
+.mode-tab {
+  padding: 5px 14px; border-radius: 5px; font-size: 12px; font-weight: 600;
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.mode-tab:hover { color: var(--text); border-color: var(--text); }
+.mode-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ── Review panel ──────────────────────────────────────────── */
+#review-stats-bar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+}
+.review-counts { font-size: 12px; color: var(--muted); flex: 1; }
+.review-counts span { margin-right: 14px; }
+.review-counts .cnt-approved { color: var(--success); }
+.review-counts .cnt-flagged  { color: var(--warn); }
+.review-counts .cnt-pending  { color: var(--muted); }
+
+.review-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.review-table th {
+  text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--muted); padding: 5px 8px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.review-table td { padding: 7px 8px; vertical-align: middle; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.review-table tr.data-row:hover td { background: rgba(255,255,255,0.03); }
+.review-table tr.data-row.status-approved td { opacity: 0.6; }
+
+.status-chip {
+  display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px;
+  border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.status-chip.pending  { background: rgba(136,153,170,0.15); color: var(--muted); }
+.status-chip.approved { background: rgba(38,222,129,0.15);  color: var(--success); }
+.status-chip.flagged  { background: rgba(247,183,49,0.15);  color: var(--warn); }
+
+.parent-link { font-size: 11px; }
+.parent-link .resolved   { color: var(--success); }
+.parent-link .unresolved { color: var(--warn); }
+
+.tree-prefix { color: var(--border); font-size: 12px; user-select: none; margin-right: 3px; }
+.child-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface); color: var(--muted); border-radius: 10px;
+  font-size: 10px; padding: 0 5px; margin-left: 6px; min-width: 18px; vertical-align: middle;
+}
+.ghost-parent-row td {
+  padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--muted); font-style: italic; font-size: 12px;
+}
+.ghost-badge {
+  font-size: 10px; font-style: normal; background: var(--surface);
+  padding: 1px 6px; border-radius: 8px; margin-left: 8px; opacity: 0.7;
+}
+
+.review-edit-row { display: none; }
+.review-edit-row td { padding: 12px 16px; background: var(--panel); }
+.review-edit-row.open { display: table-row; }
+.edit-form-grid {
+  display: grid; grid-template-columns: 130px 1fr 130px 1fr; gap: 8px 14px;
+  align-items: start;
+}
+.edit-form-grid .ef-label { font-size: 11px; color: var(--muted); padding-top: 7px; }
+.edit-form-grid .ef-full { grid-column: span 3; }
+.edit-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+/* ── Resolution panel ──────────────────────────────────────── */
+.res-item {
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+}
+.res-item:last-child { border-bottom: none; }
+.res-item.resolved { opacity: 0.4; pointer-events: none; }
+.res-text { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+.res-count { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+.res-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.res-suggestion-btn {
+  padding: 4px 12px; border-radius: 14px; font-size: 12px; font-weight: 500;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.res-suggestion-btn:hover { border-color: var(--success); color: var(--success); }
+.res-suggestion-btn.exact { border-color: var(--success); color: var(--success); }
+.res-search-row { display: flex; gap: 6px; align-items: center; }
+.res-search-row input { flex: 1; }
 </style>
 </head>
 <body>
@@ -177,7 +265,12 @@ a { color: var(--accent); text-decoration: none; }
       <select id="run-select"></select>
     </div>
     <div class="header-sep"></div>
-    <a href="/" style="font-size:12px; color:var(--muted);">← Explorer</a>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="annotate">Annotate</button>
+      <button class="mode-tab" data-mode="review">Review</button>
+      <button class="mode-tab" data-mode="resolve">Resolve Parents</button>
+    </div>
+    <a href="/" style="font-size:12px; color:var(--muted); margin-left:8px">← Explorer</a>
   </div>
 
   <div id="layout">
@@ -369,6 +462,53 @@ a { color: var(--accent); text-decoration: none; }
         </div>
 
       </div>
+
+      <!-- Review panel -->
+      <div id="review-panel" style="display:none; padding-bottom:40px">
+
+        <div id="review-stats-bar">
+          <div class="review-counts">
+            <span class="cnt-approved">✓ <span id="rv-approved">0</span> approved</span>
+            <span class="cnt-flagged">⚑ <span id="rv-flagged">0</span> flagged</span>
+            <span class="cnt-pending">● <span id="rv-pending">0</span> pending</span>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-finalize" disabled>Finalize Run →</button>
+          <span id="finalize-status" style="font-size:12px; color:var(--success); margin-left:8px; opacity:0; transition:opacity 0.3s"></span>
+        </div>
+
+        <div id="review-table-wrap" style="overflow-x:auto">
+          <table class="review-table" id="review-table">
+            <thead>
+              <tr>
+                <th style="width:80px">Status</th>
+                <th>Org Name</th>
+                <th style="width:140px">Class</th>
+                <th style="width:160px">Parent Org</th>
+                <th style="width:80px">Region</th>
+                <th style="width:110px">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="review-tbody"></tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- Resolution panel -->
+      <div id="resolution-panel" style="display:none; max-width:760px; padding-bottom:40px">
+        <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:6px">
+          <div style="font-size:1rem; font-weight:600">Parent Org Resolution</div>
+          <div id="resolution-stats" style="font-size:12px; color:var(--muted)"></div>
+        </div>
+        <p style="font-size:12px; color:var(--muted); margin-bottom:18px">
+          Each row is a unique <code>parent_org</code> text value from this run that hasn't been linked
+          to an org record yet. Click a suggested match or search by name to confirm the link.
+          This sets <code>parent_org_id</code> FK on all annotations sharing that text.
+        </p>
+        <div id="resolution-list"></div>
+        <datalist id="res-org-datalist"></datalist>
+      </div>
+
     </div>
 
   </div>
@@ -1176,6 +1316,549 @@ function esc(str) {
 function truncate(str, n) {
   return str.length > n ? str.slice(0, n - 1) + '…' : str;
 }
+
+// ── Mode switching ────────────────────────────────────────────────────────
+let _currentMode = 'annotate';
+let _resolutionItems = [];          // ParentOrgResolutionItem[] from last load
+let _ioOrgsByName = new Map();      // lowercase canonical_name → {org_id, canonical_name}
+
+document.querySelectorAll('.mode-tab').forEach(btn => {
+  btn.addEventListener('click', () => setMode(btn.dataset.mode));
+});
+
+function setMode(mode) {
+  _currentMode = mode;
+
+  // Tab highlights
+  document.querySelectorAll('.mode-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+
+  const sidebar  = document.getElementById('sidebar');
+  const empty    = document.getElementById('empty-state');
+  const annPanel = document.getElementById('annotation-panel');
+  const revPanel = document.getElementById('review-panel');
+  const resPanel = document.getElementById('resolution-panel');
+
+  // Hide all content panels first
+  revPanel.style.display = 'none';
+  resPanel.style.display = 'none';
+
+  if (mode === 'annotate') {
+    sidebar.style.display  = '';
+    empty.style.display    = state.activeIdx === null ? '' : 'none';
+    annPanel.style.display = state.activeIdx !== null ? 'block' : 'none';
+  } else {
+    sidebar.style.display  = 'none';
+    empty.style.display    = 'none';
+    annPanel.style.display = 'none';
+    if (mode === 'review') {
+      revPanel.style.display = 'block';
+      loadReviewTable();
+    } else {
+      resPanel.style.display = 'block';
+      loadResolutionQueue();
+    }
+  }
+}
+
+async function loadResolutionQueue() {
+  if (!state.runId) return;
+
+  // Pre-load IO org name→id map once
+  if (_ioOrgsByName.size === 0) {
+    const orgs = await apiFetch('/api/organizations?meta_type=io&limit=500');
+    if (orgs && orgs.items) {
+      orgs.items.forEach(o => _ioOrgsByName.set(o.canonical_name.toLowerCase(), {
+        org_id: o.org_id,
+        canonical_name: o.canonical_name,
+      }));
+      // Populate shared datalist
+      const dl = document.getElementById('res-org-datalist');
+      dl.innerHTML = [..._ioOrgsByName.values()]
+        .sort((a, b) => a.canonical_name.localeCompare(b.canonical_name))
+        .map(o => `<option value="${esc(o.canonical_name)}">`)
+        .join('');
+    }
+  }
+
+  const data = await apiFetch(`/api/ontology/resolution-queue?run_id=${state.runId}`);
+  if (!data) return;
+
+  _resolutionItems = data.items;
+
+  document.getElementById('resolution-stats').textContent =
+    `${data.total_resolved} resolved · ${data.total_unresolved} unresolved`;
+
+  const list = document.getElementById('resolution-list');
+  list.innerHTML = '';
+
+  if (!data.items.length) {
+    list.innerHTML = '<div style="color:var(--success); font-size:13px; padding:12px 0">All parent orgs resolved!</div>';
+    return;
+  }
+
+  data.items.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'res-item';
+    div.id = `res-item-${idx}`;
+
+    const sugHtml = item.suggestions.map(s =>
+      `<button class="res-suggestion-btn${s.match_method === 'exact_name' ? ' exact' : ''}"
+               data-org-id="${s.org_id}" data-org-name="${esc(s.canonical_name)}"
+               title="Match: ${s.match_method}">
+         ${esc(s.canonical_name)}
+       </button>`
+    ).join('');
+
+    div.innerHTML = `
+      <div class="res-text">"${esc(item.parent_org_text)}"</div>
+      <div class="res-count">${item.mapping_count} annotation${item.mapping_count !== 1 ? 's' : ''}</div>
+      ${item.suggestions.length ? `<div class="res-suggestions">${sugHtml}</div>` : ''}
+      <div class="res-search-row">
+        <input list="res-org-datalist" id="res-input-${idx}"
+               placeholder="Search org by name…" autocomplete="off">
+        <button class="btn btn-sm btn-secondary" id="res-confirm-${idx}">Confirm</button>
+        <button class="btn btn-sm btn-danger" id="res-skip-${idx}">Skip</button>
+      </div>
+    `;
+
+    // Wire suggestion buttons
+    div.querySelectorAll('.res-suggestion-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        confirmResolution(idx, parseInt(btn.dataset.orgId), btn.dataset.orgName);
+      });
+    });
+
+    // Wire confirm button (uses search input)
+    document.createElement('span');  // dummy — wiring below after append
+    div.querySelector(`#res-confirm-${idx}`).addEventListener('click', () => {
+      const input = document.getElementById(`res-input-${idx}`);
+      confirmResolutionFromInput(idx, input);
+    });
+
+    // Wire skip button
+    div.querySelector(`#res-skip-${idx}`).addEventListener('click', () => {
+      div.style.display = 'none';
+    });
+
+    list.appendChild(div);
+  });
+}
+
+async function confirmResolution(idx, parentOrgId, orgName) {
+  const item = _resolutionItems[idx];
+  if (!item) return;
+
+  const result = await apiFetch('/api/ontology/resolve-parent-org', {
+    method: 'POST',
+    body: { run_id: state.runId, parent_org_text: item.parent_org_text, parent_org_id: parentOrgId },
+  });
+  if (!result) { showSaveStatus('Error resolving.', true); return; }
+
+  const div = document.getElementById(`res-item-${idx}`);
+  if (div) {
+    div.classList.add('resolved');
+    div.innerHTML = `
+      <div class="res-text">"${esc(item.parent_org_text)}" → ${esc(orgName)}</div>
+      <div class="res-count" style="color:var(--success)">${result.updated_count} annotation${result.updated_count !== 1 ? 's' : ''} resolved</div>
+    `;
+  }
+
+  // Update stats line
+  const statsEl = document.getElementById('resolution-stats');
+  const m = statsEl.textContent.match(/(\d+) resolved · (\d+) unresolved/);
+  if (m) {
+    statsEl.textContent = `${parseInt(m[1]) + 1} resolved · ${Math.max(0, parseInt(m[2]) - 1)} unresolved`;
+  }
+}
+
+function confirmResolutionFromInput(idx, inputEl) {
+  const name = (inputEl.value || '').trim();
+  if (!name) { showSaveStatus('Enter an org name first.', true); return; }
+  const org = _ioOrgsByName.get(name.toLowerCase());
+  if (!org) { showSaveStatus(`Not found: "${name}"`, true); return; }
+  confirmResolution(idx, org.org_id, org.canonical_name);
+}
+
+// ── Review mode ───────────────────────────────────────────────────────────
+let _reviewItems = [];   // OntologyReviewItem[] — last loaded
+
+async function loadReviewTable() {
+  if (!state.runId) return;
+  const data = await apiFetch(`/api/ontology/review?run_id=${state.runId}`);
+  if (!data) return;
+  _reviewItems = data.items;
+  updateReviewStats(data);
+  renderReviewTable(data.items);
+}
+
+function updateReviewStats(data) {
+  document.getElementById('rv-approved').textContent = data.approved;
+  document.getElementById('rv-flagged').textContent  = data.flagged;
+  document.getElementById('rv-pending').textContent  = data.pending;
+  const finBtn = document.getElementById('btn-finalize');
+  finBtn.disabled = data.pending > 0;
+  finBtn.title = data.pending > 0
+    ? `${data.pending} annotation(s) still pending`
+    : 'All items reviewed — click to validate this run';
+}
+
+function renderReviewTable(items) {
+  const tbody = document.getElementById('review-tbody');
+  tbody.innerHTML = '';
+
+  // ── Build parent-child tree ───────────────────────────────────────────────
+  // parent_org_id is organizations.org_id — must match item.org_id in this run
+  const orgIdToItem = new Map(items.map(item => [item.org_id, item]));
+  const childrenOf  = new Map();  // org_id (parent) → [child items]
+  const roots       = [];         // items with no resolvable parent in this run
+  // Ghost parents: parent_org_id present but the parent org is not in this run
+  const ghostParents = new Map(); // parent_org_id → display name
+
+  items.forEach(item => {
+    if (item.parent_org_id && orgIdToItem.has(item.parent_org_id)) {
+      // Parent IS in this run — real child
+      if (!childrenOf.has(item.parent_org_id)) childrenOf.set(item.parent_org_id, []);
+      childrenOf.get(item.parent_org_id).push(item);
+    } else if (item.parent_org_id) {
+      // Parent NOT in this run — make a ghost header row
+      if (!ghostParents.has(item.parent_org_id)) {
+        ghostParents.set(item.parent_org_id,
+          item.parent_org_resolved || item.parent_org || `Org #${item.parent_org_id}`);
+      }
+      if (!childrenOf.has(item.parent_org_id)) childrenOf.set(item.parent_org_id, []);
+      childrenOf.get(item.parent_org_id).push(item);
+    } else {
+      roots.push(item);
+    }
+  });
+
+  // Top-level nodes: real roots + ghost parent headers (sorted alphabetically together)
+  const topLevel = [
+    ...roots.map(item => ({ type: 'item', item })),
+    ...[...ghostParents.entries()].map(([orgId, name]) => ({ type: 'ghost', orgId, name })),
+  ];
+
+  // Depth-first flatten, alphabetical at each level, cycle-safe
+  function sortKey(n) { return n.type === 'item' ? n.item.canonical_name : n.name; }
+
+  function flatten(nodes, depth, visited) {
+    const result = [];
+    nodes.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    nodes.forEach(node => {
+      if (node.type === 'ghost') {
+        result.push({ type: 'ghost', orgId: node.orgId, name: node.name, depth });
+        const kids = (childrenOf.get(node.orgId) || []).map(k => ({ type: 'item', item: k }));
+        if (kids.length) result.push(...flatten(kids, depth + 1, new Set(visited)));
+      } else {
+        const item = node.item;
+        if (visited.has(item.org_id)) return;  // cycle guard
+        visited.add(item.org_id);
+        result.push({ type: 'item', item, depth });
+        const kids = (childrenOf.get(item.org_id) || []).map(k => ({ type: 'item', item: k }));
+        if (kids.length) result.push(...flatten(kids, depth + 1, new Set(visited)));
+      }
+    });
+    return result;
+  }
+
+  const ordered = flatten(topLevel, 0, new Set());
+
+  ordered.forEach(node => {
+    // ── Ghost parent header row ────────────────────────────────
+    if (node.type === 'ghost') {
+      const indent  = 8 + node.depth * 22;
+      const nKids   = (childrenOf.get(node.orgId) || []).length;
+      const ghostTr = document.createElement('tr');
+      ghostTr.className = 'ghost-parent-row';
+      ghostTr.innerHTML = `
+        <td></td>
+        <td colspan="5" style="padding-left:${indent}px">
+          ◈ ${esc(node.name)}
+          <span class="ghost-badge">${nKids} member${nKids !== 1 ? 's' : ''} · not annotated in this run</span>
+        </td>
+      `;
+      tbody.appendChild(ghostTr);
+      return;
+    }
+
+    // ── Annotated org row ──────────────────────────────────────
+    const { item, depth } = node;
+    const idx      = _reviewItems.indexOf(item);
+    const indent   = 8 + depth * 22;
+    const prefix   = depth > 0 ? '<span class="tree-prefix">└ </span>' : '';
+    const kids     = childrenOf.get(item.org_id) || [];
+    const kidBadge = kids.length
+      ? `<span class="child-count" title="${kids.length} child org(s)">${kids.length}</span>`
+      : '';
+
+    const parentHtml = item.parent_org
+      ? item.parent_org_id
+        ? `<span class="parent-link"><span class="resolved">✓</span> ${esc(item.parent_org)}</span>`
+        : `<span class="parent-link"><span class="unresolved">?</span> ${esc(item.parent_org)}</span>`
+      : '<span style="color:var(--muted)">—</span>';
+
+    const tr = document.createElement('tr');
+    tr.className = `data-row status-${item.review_status}`;
+    tr.id = `rv-row-${idx}`;
+
+    tr.innerHTML = `
+      <td><span class="status-chip ${item.review_status}" id="rv-chip-${idx}">${item.review_status}</span></td>
+      <td title="${esc(item.canonical_name)}"
+          style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:${indent}px">
+        ${prefix}${esc(item.canonical_name)}${kidBadge}
+      </td>
+      <td style="font-size:11px; color:var(--muted)">${esc(item.equivalence_class)}</td>
+      <td>${parentHtml}</td>
+      <td style="font-size:11px; color:var(--muted)">${item.region ? esc(item.region) : '—'}</td>
+      <td>
+        <button class="btn btn-sm" title="Approve" id="rv-approve-${idx}"
+                style="padding:3px 8px; color:var(--success); border:1px solid var(--success)">✓</button>
+        <button class="btn btn-sm" title="Flag" id="rv-flag-${idx}"
+                style="padding:3px 8px; color:var(--warn); border:1px solid var(--warn)">⚑</button>
+        <button class="btn btn-sm btn-secondary" title="Edit" id="rv-edit-${idx}"
+                style="padding:3px 8px">Edit</button>
+      </td>
+    `;
+
+    const editTr = document.createElement('tr');
+    editTr.className = 'review-edit-row';
+    editTr.id = `rv-edit-row-${idx}`;
+    editTr.innerHTML = `<td colspan="6">${buildEditForm(item, idx)}</td>`;
+
+    tbody.appendChild(tr);
+    tbody.appendChild(editTr);
+
+    document.getElementById(`rv-approve-${idx}`).addEventListener('click', () => patchStatus(idx, 'approved'));
+    document.getElementById(`rv-flag-${idx}`).addEventListener('click',   () => patchStatus(idx, 'flagged'));
+    document.getElementById(`rv-edit-${idx}`).addEventListener('click',   () => toggleEditRow(idx));
+  });
+}
+
+function buildEditForm(item, idx) {
+  // Build equivalence class options
+  const clsOpts = (state.equivalenceClasses || []).map(c =>
+    `<option value="${esc(c.value)}" ${c.value === item.equivalence_class ? 'selected' : ''}>${esc(c.label)}</option>`
+  ).join('');
+
+  // Build parent category options (same list, minus exclude classes)
+  const pcOpts = '<option value="">— auto / none —</option>' +
+    (state.equivalenceClasses || [])
+      .filter(c => !c.value.startsWith('not_') && c.value !== 'needs_review')
+      .map(c => `<option value="${esc(c.value)}" ${c.value === (item.parent_category || '') ? 'selected' : ''}>${esc(c.label)}</option>`)
+      .join('');
+
+  const tags = Array.isArray(item.thematic_tags) ? item.thematic_tags : [];
+  const tagChips = tags.map((t, i) =>
+    `<span class="tag-chip">${esc(t)}<span class="chip-remove" data-idx="${i}" data-editoridx="${idx}">×</span></span>`
+  ).join('');
+
+  return `
+    <div class="edit-form-grid">
+      <label class="ef-label">Equiv. class</label>
+      <select id="ef-class-${idx}" class="form-input">${clsOpts}</select>
+      <label class="ef-label">Parent category</label>
+      <select id="ef-pcat-${idx}" class="form-input">${pcOpts}</select>
+
+      <label class="ef-label">Parent org</label>
+      <div style="grid-column:span 3; display:flex; gap:6px; align-items:center">
+        <input id="ef-porg-${idx}" class="form-input" list="res-org-datalist"
+               value="${esc(item.parent_org || '')}" placeholder="e.g. World Bank Group" autocomplete="off"
+               style="flex:1" oninput="updateParentOrgIndicator(${idx})">
+        <span id="ef-porg-ind-${idx}" style="font-size:11px; white-space:nowrap">
+          ${item.parent_org_id
+            ? `<span style="color:var(--success)">✓ ${esc(item.parent_org_resolved || '')}</span>`
+            : item.parent_org ? '<span style="color:var(--warn)">? unresolved</span>' : ''}
+        </span>
+      </div>
+
+      <label class="ef-label">Region</label>
+      <input id="ef-region-${idx}" class="form-input" list="region-list"
+             value="${esc(item.region || '')}" placeholder="e.g. Global">
+      <label class="ef-label">Notes</label>
+      <textarea id="ef-notes-${idx}" class="form-input" rows="2"
+                placeholder="Optional annotation notes">${esc(item.annotation_notes || '')}</textarea>
+
+      <label class="ef-label" style="padding-top:4px">Tags</label>
+      <div class="ef-full" style="grid-column:span 3">
+        <div class="tag-input-row" style="margin-bottom:4px">
+          <input id="ef-taginput-${idx}" list="tag-suggestions" placeholder="Add tag" autocomplete="off">
+          <button type="button" onclick="addReviewTag(${idx})">Add</button>
+        </div>
+        <div class="tag-chips" id="ef-tagchips-${idx}">${tagChips}</div>
+      </div>
+    </div>
+    <div class="edit-actions">
+      <button class="btn btn-primary btn-sm" onclick="saveEditRow(${idx})">Save</button>
+      <button class="btn btn-secondary btn-sm" onclick="toggleEditRow(${idx})">Cancel</button>
+      <span id="ef-status-${idx}" style="font-size:12px; margin-left:8px"></span>
+    </div>
+  `;
+}
+
+// Per-edit-row tag state: map of idx → string[]
+const _editTags = {};
+
+function getEditTags(idx) {
+  if (!_editTags[idx]) {
+    const item = _reviewItems[idx];
+    _editTags[idx] = Array.isArray(item?.thematic_tags) ? [...item.thematic_tags] : [];
+  }
+  return _editTags[idx];
+}
+
+function addReviewTag(idx) {
+  const input = document.getElementById(`ef-taginput-${idx}`);
+  const tag = (input.value || '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (!tag) return;
+  const tags = getEditTags(idx);
+  if (!tags.includes(tag)) { tags.push(tag); renderEditTagChips(idx); }
+  input.value = '';
+}
+
+function renderEditTagChips(idx) {
+  const container = document.getElementById(`ef-tagchips-${idx}`);
+  if (!container) return;
+  const tags = getEditTags(idx);
+  container.innerHTML = tags.map((t, i) =>
+    `<span class="tag-chip">${esc(t)}<span class="chip-remove" onclick="removeReviewTag(${idx},${i})">×</span></span>`
+  ).join('');
+}
+
+function removeReviewTag(idx, tagIdx) {
+  getEditTags(idx).splice(tagIdx, 1);
+  renderEditTagChips(idx);
+}
+
+function updateParentOrgIndicator(idx) {
+  const input = document.getElementById(`ef-porg-${idx}`);
+  const ind   = document.getElementById(`ef-porg-ind-${idx}`);
+  const name  = (input.value || '').trim();
+  if (!name) { ind.innerHTML = ''; return; }
+  const org = _ioOrgsByName.get(name.toLowerCase());
+  ind.innerHTML = org
+    ? `<span style="color:var(--success)">✓ ${esc(org.canonical_name)}</span>`
+    : '<span style="color:var(--warn)">? not found</span>';
+}
+
+function toggleEditRow(idx) {
+  const editRow = document.getElementById(`rv-edit-row-${idx}`);
+  const isOpen  = editRow.classList.contains('open');
+  // Collapse all open edit rows first
+  document.querySelectorAll('.review-edit-row.open').forEach(r => r.classList.remove('open'));
+  if (!isOpen) {
+    // Reset tag state from current item data
+    delete _editTags[idx];
+    editRow.classList.add('open');
+    // Re-inject the form so it picks up current item state
+    const item = _reviewItems[idx];
+    editRow.querySelector('td').innerHTML = buildEditForm(item, idx);
+    renderEditTagChips(idx);
+    // Ensure IO org datalist is populated
+    if (_ioOrgsByName.size === 0) loadResolutionQueue();  // side-effect: populates datalist
+  }
+}
+
+async function patchStatus(idx, status) {
+  const item = _reviewItems[idx];
+  const result = await apiFetch(`/api/ontology/mappings/${item.mapping_id}`, {
+    method: 'PATCH',
+    body: { review_status: status },
+  });
+  if (!result) return;
+
+  // Update local state and DOM
+  item.review_status = status;
+  const chip = document.getElementById(`rv-chip-${idx}`);
+  if (chip) { chip.className = `status-chip ${status}`; chip.textContent = status; }
+  const dataRow = document.getElementById(`rv-row-${idx}`);
+  if (dataRow) { dataRow.className = `data-row status-${status}`; }
+
+  // Update stats
+  recalcReviewStats();
+}
+
+async function saveEditRow(idx) {
+  const item    = _reviewItems[idx];
+  const eqClass = document.getElementById(`ef-class-${idx}`)?.value || item.equivalence_class;
+  const pcat    = document.getElementById(`ef-pcat-${idx}`)?.value || null;
+  const porgText = (document.getElementById(`ef-porg-${idx}`)?.value || '').trim() || null;
+  const region  = (document.getElementById(`ef-region-${idx}`)?.value || '').trim() || null;
+  const notes   = (document.getElementById(`ef-notes-${idx}`)?.value || '').trim() || null;
+  const tags    = getEditTags(idx);
+
+  // Resolve parent_org_id from text if possible
+  const org = porgText ? _ioOrgsByName.get(porgText.toLowerCase()) : null;
+  const porgId = org ? org.org_id : (porgText === item.parent_org ? item.parent_org_id : null);
+
+  const statusEl = document.getElementById(`ef-status-${idx}`);
+  statusEl.textContent = 'Saving…';
+  statusEl.style.color = 'var(--muted)';
+
+  const result = await apiFetch(`/api/ontology/mappings/${item.mapping_id}`, {
+    method: 'PATCH',
+    body: {
+      equivalence_class: eqClass,
+      parent_category:   pcat,
+      parent_org:        porgText,
+      parent_org_id:     porgId,
+      region,
+      thematic_tags:     tags,
+      annotation_notes:  notes,
+    },
+  });
+
+  if (!result) {
+    statusEl.textContent = 'Error saving.';
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+
+  // Update local state
+  Object.assign(item, {
+    equivalence_class: result.equivalence_class ?? item.equivalence_class,
+    parent_category:   result.parent_category   ?? item.parent_category,
+    parent_org:        result.parent_org        ?? item.parent_org,
+    parent_org_id:     result.parent_org_id     ?? item.parent_org_id,
+    region:            result.region            ?? item.region,
+    thematic_tags:     result.thematic_tags     ?? item.thematic_tags,
+    annotation_notes:  result.annotation_notes  ?? item.annotation_notes,
+  });
+
+  statusEl.textContent = 'Saved ✓';
+  statusEl.style.color = 'var(--success)';
+  // Reload the full table so tree re-renders with any new parent-child relationships
+  setTimeout(() => loadReviewTable(), 800);
+}
+
+function recalcReviewStats() {
+  const counts = { pending: 0, approved: 0, flagged: 0 };
+  _reviewItems.forEach(i => { counts[i.review_status] = (counts[i.review_status] || 0) + 1; });
+  document.getElementById('rv-approved').textContent = counts.approved;
+  document.getElementById('rv-flagged').textContent  = counts.flagged;
+  document.getElementById('rv-pending').textContent  = counts.pending;
+  const finBtn = document.getElementById('btn-finalize');
+  finBtn.disabled = counts.pending > 0;
+}
+
+document.getElementById('btn-finalize').addEventListener('click', async () => {
+  const result = await apiFetch(`/api/ontology/runs/${state.runId}/finalize`, { method: 'POST' });
+  if (!result) return;
+  const statusEl = document.getElementById('finalize-status');
+  if (result.pending_count > 0) {
+    statusEl.textContent = result.message;
+    statusEl.style.color = 'var(--warn)';
+  } else {
+    statusEl.textContent = 'Run validated ✓';
+    statusEl.style.color = 'var(--success)';
+    document.getElementById('btn-finalize').disabled = true;
+    // Disable all action buttons
+    document.querySelectorAll('#review-tbody .btn').forEach(b => b.disabled = true);
+  }
+  statusEl.style.opacity = '1';
+  setTimeout(() => { statusEl.style.opacity = '0'; }, 4000);
+});
 
 // ── Start ─────────────────────────────────────────────────────────────────
 boot();
