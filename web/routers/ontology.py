@@ -34,6 +34,9 @@ from web.models import (
     OntologyReviewResponse,
     OntologyMappingPatch,
     OntologyRunFinalizeResponse,
+    OntologyClassSummaryItem,
+    OntologyClassRenameRequest,
+    OntologyClassRenameResponse,
 )
 
 router = APIRouter()
@@ -243,9 +246,23 @@ def get_queue(
     run_id: int = Query(...),
     limit: int = Query(200, le=500),
     offset: int = Query(0),
+    sort_by: str = Query("name"),          # "name" | "country"
+    filter_country: Optional[str] = Query(None),  # ISO alpha-3 to restrict queue
 ):
     cfg = _get_category(category)
     where = cfg["candidate_where"]
+
+    country_filter = ""
+    params_extra: dict = {}
+    if filter_country:
+        country_filter = "AND o.location_country = %(filter_country)s"
+        params_extra["filter_country"] = filter_country
+
+    order_clause = (
+        "(oom.mapping_id IS NOT NULL) ASC, o.canonical_name"
+        if sort_by == "name"
+        else "(oom.mapping_id IS NOT NULL) ASC, o.location_country NULLS LAST, o.canonical_name"
+    )
 
     queue_sql = f"""
         SELECT
@@ -260,29 +277,29 @@ def get_queue(
         FROM prosopography.organizations o
         LEFT JOIN prosopography.org_ontology_mappings oom
             ON oom.org_id = o.org_id AND oom.run_id = %(run_id)s
-        WHERE {where}
-        ORDER BY (oom.mapping_id IS NOT NULL) ASC, o.location_country NULLS LAST, o.canonical_name
+        WHERE {where} {country_filter}
+        ORDER BY {order_clause}
         LIMIT %(limit)s OFFSET %(offset)s
     """
     count_sql = f"""
         SELECT COUNT(DISTINCT o.org_id)
         FROM prosopography.organizations o
-        WHERE {where}
+        WHERE {where} {country_filter}
     """
     reviewed_sql = f"""
         SELECT COUNT(*)
         FROM prosopography.org_ontology_mappings oom
         JOIN prosopography.organizations o ON o.org_id = oom.org_id
-        WHERE oom.run_id = %(run_id)s AND ({where})
+        WHERE oom.run_id = %(run_id)s AND ({where}) {country_filter}
     """
 
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute(count_sql)
+        cur.execute(count_sql, params_extra)
         total = cur.fetchone()[0]
-        cur.execute(reviewed_sql, {"run_id": run_id})
+        cur.execute(reviewed_sql, {"run_id": run_id, **params_extra})
         reviewed = cur.fetchone()[0]
-        cur.execute(queue_sql, {"run_id": run_id, "limit": limit, "offset": offset})
+        cur.execute(queue_sql, {"run_id": run_id, "limit": limit, "offset": offset, **params_extra})
         rows = rows_to_dicts(cur)
         cur.close()
 
@@ -816,7 +833,7 @@ def get_review(run_id: int = Query(...)):
 
         cur.execute("""
             SELECT
-                oom.mapping_id, o.org_id, o.canonical_name,
+                oom.mapping_id, o.org_id, o.canonical_name, oom.display_label,
                 oom.equivalence_class, oom.parent_category, oom.hierarchy_path,
                 oom.parent_org, oom.parent_org_id,
                 parent_o.canonical_name AS parent_org_resolved,
@@ -865,7 +882,7 @@ def patch_mapping(mapping_id: int, body: OntologyMappingPatch):
     # Allowed column names — all hardcoded, no injection risk
     _allowed = {
         "equivalence_class", "parent_category", "parent_org", "parent_org_id",
-        "region", "thematic_tags", "annotation_notes", "review_status",
+        "display_label", "region", "thematic_tags", "annotation_notes", "review_status",
     }
     set_parts = []
     params: dict = {"mapping_id": mapping_id}
@@ -991,3 +1008,152 @@ def delete_mapping(mapping_id: int):
         cur.close()
     if not deleted:
         raise HTTPException(status_code=404, detail="Mapping not found")
+
+
+# ── Schema management ─────────────────────────────────────────────────────────
+
+@router.get("/classes/summary", response_model=list[OntologyClassSummaryItem])
+def get_class_summary(run_id: int = Query(...), category: str = Query(...)):
+    """Return per-class annotation counts for a run, merged with the hardcoded hierarchy."""
+    cfg = _get_category(category)
+    hardcoded = {c["value"]: c for c in cfg["equivalence_classes"]}
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+
+        # Annotation counts grouped by equivalence_class, excluding exclusion classes
+        cur.execute("""
+            SELECT equivalence_class, COUNT(*) AS cnt
+            FROM prosopography.org_ontology_mappings
+            WHERE run_id = %(run_id)s
+              AND equivalence_class NOT IN ('not_mfa','not_executive','not_io_body','needs_review')
+            GROUP BY equivalence_class
+        """, {"run_id": run_id})
+        counts = {row[0]: row[1] for row in cur.fetchall()}
+
+        # User-defined classes for this category
+        cur.execute("""
+            SELECT value, label, parent_class
+            FROM prosopography.ontology_user_classes
+            WHERE category = %(category)s
+            ORDER BY parent_class, value
+        """, {"category": category})
+        user_rows = cur.fetchall()
+        cur.close()
+
+    items: list[OntologyClassSummaryItem] = []
+
+    # Hardcoded classes (level 1–3), skip exclusion classes
+    for c in cfg["equivalence_classes"]:
+        if c["level"] == 0:
+            continue
+        items.append(OntologyClassSummaryItem(
+            value=c["value"],
+            label=c["label"],
+            level=c["level"],
+            parent_class=_DEFAULT_PARENT.get(c["value"]),
+            count=counts.get(c["value"], 0),
+            is_user_defined=False,
+        ))
+
+    # User-defined classes (level 4+)
+    for value, label, parent_class in user_rows:
+        items.append(OntologyClassSummaryItem(
+            value=value,
+            label=label,
+            level=4,
+            parent_class=parent_class,
+            count=counts.get(value, 0),
+            is_user_defined=True,
+        ))
+
+    return items
+
+
+@router.post("/classes/rename", response_model=OntologyClassRenameResponse)
+def rename_user_class(body: OntologyClassRenameRequest):
+    """Rename a user-defined equivalence class and bulk-update all annotations in the run.
+    Only operates on classes in ontology_user_classes (level 4+).
+    Hardcoded class names cannot be renamed.
+    """
+    # Verify the class is user-defined (not hardcoded)
+    all_hardcoded = {
+        c["value"]
+        for cfg in CATEGORY_CONFIG.values()
+        for c in cfg["equivalence_classes"]
+    }
+    if body.old_value in all_hardcoded:
+        raise HTTPException(status_code=400, detail=f"'{body.old_value}' is a hardcoded class and cannot be renamed.")
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+
+        # Check user class exists
+        cur.execute("""
+            SELECT value FROM prosopography.ontology_user_classes
+            WHERE value = %(old_value)s
+        """, {"old_value": body.old_value})
+        if not cur.fetchone():
+            cur.close()
+            raise HTTPException(status_code=404, detail=f"User class '{body.old_value}' not found.")
+
+        # Rename in ontology_user_classes
+        cur.execute("""
+            UPDATE prosopography.ontology_user_classes
+            SET value = %(new_value)s, label = %(new_label)s
+            WHERE value = %(old_value)s
+        """, {"old_value": body.old_value, "new_value": body.new_value, "new_label": body.new_label})
+
+        # Also update parent_class references for any child user classes
+        cur.execute("""
+            UPDATE prosopography.ontology_user_classes
+            SET parent_class = %(new_value)s
+            WHERE parent_class = %(old_value)s
+        """, {"old_value": body.old_value, "new_value": body.new_value})
+
+        # Bulk-update mappings in the run
+        cur.execute("""
+            UPDATE prosopography.org_ontology_mappings
+            SET equivalence_class = %(new_value)s, updated_at = now()
+            WHERE run_id = %(run_id)s AND equivalence_class = %(old_value)s
+            RETURNING mapping_id, parent_category
+        """, {"run_id": body.run_id, "old_value": body.old_value, "new_value": body.new_value})
+        updated_rows = cur.fetchall()
+        updated_count = len(updated_rows)
+
+        # Recompute hierarchy_path for each updated row
+        for mapping_id, parent_category in updated_rows:
+            hp = _compute_hierarchy_path(body.new_value, parent_category)
+            cur.execute("""
+                UPDATE prosopography.org_ontology_mappings
+                SET hierarchy_path = %(hp)s
+                WHERE mapping_id = %(mid)s
+            """, {"hp": hp, "mid": mapping_id})
+
+        conn.commit()
+        cur.close()
+
+    return OntologyClassRenameResponse(
+        old_value=body.old_value,
+        new_value=body.new_value,
+        updated_count=updated_count,
+    )
+
+
+@router.post("/runs/{run_id}/reset-pending", response_model=dict)
+def reset_run_to_pending(run_id: int):
+    """Reset all annotation review_status values in a run back to 'pending'.
+    Used before retroactive rework. Does not touch evaluation_status on derivative_runs.
+    """
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE prosopography.org_ontology_mappings
+            SET review_status = 'pending', updated_at = now()
+            WHERE run_id = %(run_id)s
+            RETURNING mapping_id
+        """, {"run_id": run_id})
+        reset_count = len(cur.fetchall())
+        conn.commit()
+        cur.close()
+    return {"reset_count": reset_count}

@@ -22,19 +22,14 @@ uvicorn web.app:app --reload --host 127.0.0.1 --port 8000
 
 ## Database Migrations
 
-All 15 migration scripts are in `db/` and are safe to re-run (idempotent). Run in order:
-
-```bash
-cd db/
-python migrate_01_create_schema.py
-# ... through ...
-python migrate_15_parent_org.py
-```
+17 migration scripts in `db/` — safe to re-run (idempotent). Run in order from `migrate_01` through `migrate_17`. `resolve_parent_orgs.py` is a standalone helper (not a sequential migration).
 
 Connection config comes from `.env`:
 ```
 DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 ```
+
+**Schema prefix:** All tables live in the `prosopography` schema. Always use fully-qualified names: `prosopography.persons`, `prosopography.career_positions`, etc.
 
 ## Architecture
 
@@ -53,7 +48,7 @@ web/
     index.html          # Main explorer UI (persons/orgs/search)
     ontology-editor.html  # Manual annotation workflow UI
 db/
-  migrate_*.py    # Sequential schema + data migrations (15 total)
+  migrate_*.py    # Sequential schema + data migrations (17 total)
   db_utils.py     # Shared DB connection for migration scripts
 ```
 
@@ -83,11 +78,25 @@ The ontology editor annotates organizations into three categories (`mfa`, `execu
 - `thematic_tags` — TEXT[] added in migrate_14
 - `parent_org` — TEXT for org-to-org sub-unit relationships, added in migrate_15
 
-Active runs: run_id=5 (MFA, reviewed), run_id=6 (executive, reviewed).
+Active runs: run_id=5 (MFA, reviewed), run_id=6 (executive, reviewed). Runs 1–4 are earlier career-tag/typology derivatives (not org ontology).
+
+### Adding a New Annotation Category
+
+Adding a category (e.g., `legislature`, `think_tank`) requires coordinated changes in **two files**:
+
+1. **`web/routers/ontology.py`** — add to `CATEGORY_CONFIG` (equivalence classes, `candidate_where` SQL), `_DEFAULT_PARENT`, and `_GRANDPARENT` dicts.
+2. **`web/static/ontology-editor.html`** — mirror the same additions in the JS `DEFAULT_PARENT`, `GRANDPARENT` dicts and `suggestLabel()` switch cases.
+3. **Seed a `derivative_runs` row** (INSERT with `run_type='ontology_mapping'`, `entity_level='organization'`, scope_json `{"category": "..."}`) — then select it in the UI.
+
+The executive queue additionally filters to orgs that have direct `career_positions.org_id` links (~52 "load-bearing" orgs). MFA queue does not apply this filter.
+
+### Org Split Feature
+
+`POST /api/ontology/orgs/{org_id}/split` — when an org has incompatible titles (e.g., "Swiss Confederation" linked to both President and Vice President), split creates new org rows, reassigns `career_positions.org_id`, and adds the new orgs to the queue. The original org retains any unassigned positions.
 
 ## Schema Reference
 
-See `DATABASE.md` for full schema documentation and `instructions.md` for project design philosophy.
+See `DATABASE.md` for full schema documentation (row counts, column definitions, useful queries) and `instructions.md` for project design philosophy. `pickup.md` has additional operational context for the ontology annotation workflow.
 
 ## Dependencies
 

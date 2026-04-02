@@ -1,138 +1,110 @@
-# Pickup: Org Ontology Annotation — Session Summary
+# Pickup: Ontology Editor v2 — Session Summary (2026-04-02)
 
-## What Was Built
+## What Was Built Today
 
-A full manual annotation tool for building a derivative ontology layer over the `organizations` table. The tool maps existing orgs to hierarchical, country-agnostic equivalence classes without modifying source data.
-
-**Running app:** `uvicorn web.app:app --reload` → http://127.0.0.1:8000
-**Annotation UI:** http://127.0.0.1:8000/ontology-editor
+Rebuilt the ontology annotation interface to support **class-first browsing** and **retroactive rework**. The old interface is preserved at `/ontology-editor-v1`. No database migrations were needed.
 
 ---
 
-## Database State
+## Where Things Stand
 
-### Derivative Runs (org ontology)
+### Annotation Data (unchanged)
 
-| run_id | name | status | annotations |
-|--------|------|--------|-------------|
-| 5 | org_ontology_mfa_v1 | reviewed | 82 |
-| 6 | org_ontology_executive_v1 | reviewed | 78 |
+| run_id | name | category | annotations | status |
+|--------|------|----------|-------------|--------|
+| 5 | org_ontology_mfa_v1 | mfa | 82 | reviewed |
+| 6 | org_ontology_executive_v1 | executive | 78 | reviewed |
 
-Runs 1–4 are earlier career-tag derivatives (not org ontology).
+- ~1,460 orgs with corpus career positions still unannotated (future runs)
+- User-defined sub-classes: 36 entries in `prosopography.ontology_user_classes` — some with inconsistent naming (e.g., mixed casing from the executive run)
 
-### Key Tables
+### What Needs Doing (retroactive rework)
 
-| Table | Purpose |
-|-------|---------|
-| `prosopography.org_ontology_mappings` | All annotations; keyed on `(org_id, run_id)` |
-| `prosopography.derivative_runs` | Provenance headers for each annotation pass |
-| `prosopography.ontology_user_classes` | User-defined sub-classes created during executive run (36 entries) |
-| `prosopography.organizations` | Source org table — never modified |
-
-### Coverage Gap
-**1,460 orgs** have career positions but no ontology annotation. These are candidates for future runs.
+The annotation scheme evolved while you were doing it. The MFA and executive runs need a retroactive consistency pass. Use the rework workflow below.
 
 ---
 
-## Equivalence Class Hierarchy
+## New Interface: How to Use
 
-### Hardcoded (in `web/routers/ontology.py` → `CATEGORY_CONFIG`)
+**Start:** `serve.bat` → http://localhost:8000/ontology-editor  
+**Old interface (fallback):** http://localhost:8000/ontology-editor-v1
 
-**MFA run classes:**
-- `national_government` (L1)
-- `ministry_of_foreign_affairs` (L2)
-- `embassy`, `permanent_mission`, `consulate`, `diplomatic_service` (L3)
-- `not_mfa`, `needs_review` (exclude)
+### Tab: Schema
 
-**Executive run classes:**
-- `national_government` (L1)
-- `executive_branch` (L2)
-- `head_of_state`, `head_of_government`, `vice_head_of_state`, `cabinet`, `executive_office`, `national_security_council`, `executive_advisory`, `special_envoy` (L3)
-- `presidential_campaign` (L0 — no hierarchy)
-- `not_executive`, `needs_review` (exclude)
+The new hub for schema management. Opens with a count-annotated hierarchy tree on the left and a user-class manager on the right.
 
-### User-Defined Sub-Classes (L4+, stored in DB)
-Created during executive run. Examples:
-- `ministry_of_finance`, `ministry_of_health` → parent: `cabinet`
-- `national_security_advisor`, `arms_control`, `ai_strategy` → parent: `executive_advisory`
-- `chief_of_staff`, `press_secretary`, `policy_advisor` → parent: `executive_office`
+**Hierarchy tree (left):**
+- Shows every annotated class with count badges
+- Singleton classes (count = 1) flagged in amber — likely over-splits to fix
+- Click any class → jumps to Review tab with that class pre-filtered
 
-New sub-classes can be added live in the annotation UI via the "Sub-class" field.
+**User-class manager (right):**
+- Lists all user-defined L4+ sub-classes with parent and count
+- Rename button → inline form to update label and/or key value
+  - Rename propagates to all annotations in the run automatically
+  - Recomputes `hierarchy_path` on all affected rows
+
+**"Reset run to pending" button:**
+- Sets all `review_status = 'pending'` for the active run
+- Does NOT delete annotation data — just resets the review workflow state
+- Use this as step 1 of the rework workflow
+
+### Tab: Review (enhanced)
+
+**Class filter dropdown** (new, top of table):
+- Filter table to a single equivalence class
+- Shows org count for the filtered class
+
+**Batch actions bar** (appears when a class is filtered):
+- **"Approve all in view"** — marks every pending annotation in the current class as approved in one click
+- **"Reassign all in view to..."** — reassigns all annotations in current class to a different class (with confirm dialog), then switches the filter to the new class
+
+### Tab: Annotate (queue improvements)
+
+Two new controls above the queue list:
+- **Sort:** A–Z (default) or By country — client-side, no reload
+- **Country filter:** dropdown of all countries in the queue — click to restrict queue to one country
 
 ---
 
-## Architecture
+## Rework Workflow (run this for runs 5 and 6)
 
-### Key Files
+**Purpose:** Ensure early annotations are consistent with the evolved scheme.
 
-| File | Role |
-|------|------|
-| `web/routers/ontology.py` | All API endpoints |
-| `web/models.py` | Pydantic models for all ontology types |
-| `web/static/ontology-editor.html` | Single-file annotation UI |
-| `db/migrate_12_create_org_ontology.py` | Creates `org_ontology_mappings` + seeds run_id 5 & 6 |
-| `db/migrate_13_user_classes.py` | Creates `ontology_user_classes` |
+1. **Select run 5** in the run dropdown
+2. Go to **Schema tab** — review the tree
+   - Note any singletons (count = 1) in amber — decide if they should be merged into a parent class
+   - Review user-class names in the right panel — rename anything with inconsistent casing before the rework pass
+3. **Rename pass first:** fix any user-class naming issues (e.g., normalize casing)
+4. Click **"Reset run to pending"** → confirm
+5. Switch to **Review tab**
+6. Use the **class filter** to work through one class at a time:
+   - Select a class, review the orgs — do they belong?
+   - Use **"Approve all in view"** if the class looks consistent
+   - Use **"Reassign"** if some orgs need to move to a different class
+   - Use the Edit button for individual corrections
+7. Repeat for each class until all items are approved or flagged
+8. Resolve any flagged items
+9. Click **Finalize Run** when all items are approved
+10. Repeat for run 6
 
-### API Endpoints
+---
+
+## New API Endpoints
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/ontology/runs` | List all runs |
-| GET | `/api/ontology/queue/{category}?run_id=` | Annotation queue for a category |
-| GET | `/api/ontology/progress/{category}?run_id=` | Progress counts |
-| GET | `/api/ontology/autocomplete/equivalence-classes?category=` | Hardcoded + user-defined classes |
-| GET | `/api/ontology/autocomplete/countries` | Country codes |
-| GET | `/api/ontology/orgs/{org_id}/context` | Career events for an org (3-tier cascade) |
-| POST | `/api/ontology/mappings` | Save/update annotation |
-| DELETE | `/api/ontology/mappings/{mapping_id}` | Remove annotation |
-| POST | `/api/ontology/orgs/{org_id}/split` | Split one org into multiple by title |
-
-### Queue Logic
-Each category defines a `candidate_where` SQL fragment. The **executive queue** additionally requires `EXISTS (SELECT 1 FROM career_positions cp WHERE cp.org_id = o.org_id)` — only orgs with direct corpus career position links are shown (the ~52 "load-bearing" orgs). This was a deliberate decision: orgs without direct links came from classification tags and have no corpus members.
-
-### Career Event Context Panel
-Uses a 3-tier cascade:
-1. Direct `cp.org_id = org_id` match
-2. Phrase match: `cp.organization ILIKE '%canonical_name%'` (strips parenthetical variants first)
-3. Sibling org lookup: other orgs in same country sharing keywords → shows their linked positions
-
-Returns `match_type` field (`direct` / `approximate` / `sibling` / `none`) displayed as a note in the UI.
-
-### Org Split Feature
-When an org has multiple incompatible titles (e.g., President + Vice President both linked to "Swiss Confederation"), the "Split Org by Title" button creates new org entries, reassigns `career_positions.org_id`, and adds the new orgs to the queue. Original org retains any unassigned positions.
+| GET | `/api/ontology/classes/summary?run_id=&category=` | Hierarchy tree with per-class counts |
+| POST | `/api/ontology/classes/rename` | Rename user-defined class + update all annotations |
+| POST | `/api/ontology/runs/{run_id}/reset-pending` | Reset all review_status to 'pending' |
+| Queue params | `?sort_by=name\|country&filter_country=XXX` | Sort/filter the annotation queue |
 
 ---
 
-## Starting a New Annotation Run
+## Architecture Notes
 
-To add a new category (e.g., legislature, think tank, UN bodies):
+**Dual-file sync requirement (unchanged):** Any new annotation category added in the future requires changes in both `web/routers/ontology.py` (Python `CATEGORY_CONFIG`, `_DEFAULT_PARENT`, `_GRANDPARENT`) AND `web/static/ontology-editor.html` (JS `DEFAULT_PARENT`, `GRANDPARENT`, `suggestLabel()`).
 
-1. **Add to `CATEGORY_CONFIG`** in `web/routers/ontology.py`:
-   - Define `equivalence_classes` list with value/label/level
-   - Define `candidate_where` SQL fragment
-   - Add new classes to `_DEFAULT_PARENT` and `_GRANDPARENT` dicts
+**DB schema:** No migrations needed. All changes used existing columns (`review_status`, `equivalence_class`, etc.).
 
-2. **Add to JS constants** in `web/static/ontology-editor.html`:
-   - `DEFAULT_PARENT` dict
-   - `GRANDPARENT` dict
-   - `suggestLabel()` switch cases
-
-3. **Seed a new `derivative_runs` row** in the DB:
-   ```sql
-   INSERT INTO prosopography.derivative_runs
-       (run_name, run_type, entity_level, evaluation_status, scope_json)
-   VALUES
-       ('org_ontology_legislature_v1', 'ontology_mapping', 'organization', 'draft',
-        '{"category": "legislature"}');
-   ```
-
-4. Select the new run in the editor UI → queue populates automatically.
-
----
-
-## Known Limitations / Future Work
-
-- **1,460 unannotated orgs** with corpus career positions — future runs needed
-- Some user-defined sub-classes from the executive run have inconsistent casing/naming (e.g., `'foreign affairs'` vs `'Ministry of Finance'`) — may want a cleanup pass
-- Org deduplication: multiple org_ids for the same institution (e.g., Swiss Federal Council as org_id 471 and 685) — the split tool addresses new cases but legacy duplicates remain
-- The `needs_review` category (5 entries in executive run) should be revisited
+**Revert:** Copy `web/static/ontology-editor-v1.html` → `web/static/ontology-editor.html` to go back to the old interface. The v1 backup is permanent and should not be modified.

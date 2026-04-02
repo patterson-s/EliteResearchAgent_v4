@@ -254,58 +254,33 @@ a { color: var(--accent); text-decoration: none; }
 .res-search-row { display: flex; gap: 6px; align-items: center; }
 .res-search-row input { flex: 1; }
 
-/* ── Schema panel ──────────────────────────────────────────── */
-#schema-panel { padding: 0 0 40px; }
-.schema-cols { display: flex; gap: 24px; align-items: flex-start; }
-.schema-tree-col { flex: 0 0 340px; }
-.schema-mgmt-col { flex: 1; }
-.schema-section-hdr {
-  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--muted); padding: 10px 0 8px; border-bottom: 1px solid var(--border); margin-bottom: 10px;
+/* ── Graph panel ───────────────────────────────────────────── */
+#graph-filter-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
-.schema-reset-bar { display: flex; align-items: center; gap: 12px; padding: 12px 0 18px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
-.schema-node {
-  display: flex; align-items: center; gap: 7px; padding: 4px 6px 4px;
-  cursor: pointer; border-radius: 4px; transition: background 0.12s;
+#graph-filter-bar label { font-size: 12px; color: var(--muted); }
+#graph-filter-bar select { font-size: 12px; }
+.graph-toggle { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.graph-toggle input { cursor: pointer; }
+.graph-legend { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--muted); margin-left: auto; }
+.legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; }
+#graph-wrap { display: flex; flex: 1; overflow: hidden; }
+#cy-container { flex: 1; height: 100%; background: var(--bg); }
+#graph-detail-panel {
+  width: 300px; flex-shrink: 0; overflow-y: auto;
+  background: var(--panel); border-left: 1px solid var(--border);
+  padding: 16px; display: none;
 }
-.schema-node:hover { background: rgba(255,255,255,0.05); }
-.schema-node .sn-indent { display: inline-block; flex-shrink: 0; color: var(--border); }
-.schema-node .sn-label { font-size: 12px; flex: 1; }
-.schema-node .sn-count {
-  font-size: 10px; font-weight: 700; background: var(--surface);
-  padding: 1px 6px; border-radius: 9px; color: var(--muted);
-}
-.schema-node.level-1 .sn-label { font-weight: 700; color: var(--text); }
-.schema-node.level-2 .sn-label { color: var(--text); }
-.schema-node.level-3 .sn-label { color: var(--muted); }
-.schema-node.level-4 .sn-label { color: var(--muted); font-style: italic; }
-.schema-node .sn-user-badge {
-  font-size: 9px; background: rgba(233,69,96,0.15); color: var(--accent);
-  padding: 1px 5px; border-radius: 8px;
-}
-.schema-node.singleton .sn-count { color: var(--warn); background: rgba(247,183,49,0.1); }
-.schema-mgmt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.schema-mgmt-table th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 4px 8px 8px; border-bottom: 1px solid var(--border); }
-.schema-mgmt-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
-.schema-rename-form { display: none; gap: 5px; align-items: center; margin-top: 5px; }
-.schema-rename-form.open { display: flex; }
-.schema-rename-form input { flex: 1; font-size: 11px; padding: 3px 7px; }
-
-/* ── Review class filter & batch actions ───────────────────── */
-.review-filter-bar { display: flex; align-items: center; gap: 10px; padding: 0 0 12px; flex-wrap: wrap; }
-.review-filter-bar label { font-size: 12px; color: var(--muted); }
-.batch-actions-bar {
-  display: none; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 8px 12px; background: rgba(233,69,96,0.07); border: 1px solid rgba(233,69,96,0.2);
-  border-radius: 6px; margin-bottom: 12px; font-size: 12px;
-}
-.batch-actions-bar.visible { display: flex; }
-.batch-actions-bar .ba-label { color: var(--muted); }
-
-/* ── Queue filter controls ─────────────────────────────────── */
-.queue-filter-row { display: flex; gap: 5px; padding: 6px 10px 2px; }
-.queue-filter-row select { font-size: 11px; padding: 3px 5px; flex: 1; min-width: 0; background: var(--bg); }
+#graph-detail-panel.open { display: block; }
+.gdp-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+.gdp-meta { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+.gdp-section { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 12px 0 6px; }
+.gdp-field { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.gdp-field label { font-size: 12px; color: var(--muted); width: 90px; flex-shrink: 0; }
+.gdp-field input, .gdp-field select { flex: 1; font-size: 12px; padding: 4px 8px; }
 </style>
+<script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
 </head>
 <body>
 <div id="app">
@@ -322,7 +297,7 @@ a { color: var(--accent); text-decoration: none; }
       <button class="mode-tab active" data-mode="annotate">Annotate</button>
       <button class="mode-tab" data-mode="review">Review</button>
       <button class="mode-tab" data-mode="resolve">Resolve Parents</button>
-      <button class="mode-tab" data-mode="schema">Schema</button>
+      <button class="mode-tab" data-mode="graph">Graph</button>
     </div>
     <a href="/" style="font-size:12px; color:var(--muted); margin-left:8px">← Explorer</a>
   </div>
@@ -339,15 +314,6 @@ a { color: var(--accent); text-decoration: none; }
         <div class="progress-track">
           <div class="progress-fill" id="progress-fill" style="width:0%"></div>
         </div>
-      </div>
-      <div class="queue-filter-row" id="queue-filter-row" style="display:none">
-        <select id="queue-sort" title="Sort order">
-          <option value="name">A–Z</option>
-          <option value="country">By country</option>
-        </select>
-        <select id="queue-country-filter" title="Filter by country">
-          <option value="">All countries</option>
-        </select>
       </div>
       <div id="queue-list"></div>
     </div>
@@ -539,27 +505,6 @@ a { color: var(--accent); text-decoration: none; }
           <span id="finalize-status" style="font-size:12px; color:var(--success); margin-left:8px; opacity:0; transition:opacity 0.3s"></span>
         </div>
 
-        <div class="review-filter-bar">
-          <label for="rv-class-filter">Filter:</label>
-          <select id="rv-class-filter">
-            <option value="">All classes</option>
-          </select>
-          <span id="rv-filter-count" style="font-size:11px; color:var(--muted)"></span>
-        </div>
-
-        <div class="batch-actions-bar" id="batch-actions-bar">
-          <span class="ba-label">Batch:</span>
-          <button class="btn btn-sm" id="btn-approve-all"
-                  style="color:var(--success); border:1px solid var(--success)">&#10003; Approve all in view</button>
-          <span style="color:var(--border)">|</span>
-          <span class="ba-label">Reassign to:</span>
-          <select id="batch-reassign-class" style="font-size:12px; padding:3px 6px">
-            <option value="">— select class —</option>
-          </select>
-          <button class="btn btn-sm btn-secondary" id="btn-reassign-all">Reassign</button>
-          <span id="batch-status" style="font-size:11px; color:var(--success); margin-left:6px"></span>
-        </div>
-
         <div id="review-table-wrap" style="overflow-x:auto">
           <table class="review-table" id="review-table">
             <thead>
@@ -593,36 +538,76 @@ a { color: var(--accent); text-decoration: none; }
         <datalist id="res-org-datalist"></datalist>
       </div>
 
-      <!-- Schema panel -->
-      <div id="schema-panel" style="display:none; padding-bottom:40px">
+      <!-- Graph panel -->
+      <div id="graph-panel" style="display:none; flex-direction:column; height:100%; padding:0">
 
-        <div class="schema-reset-bar">
-          <span style="font-size:13px; font-weight:600">Schema Overview</span>
-          <span style="flex:1"></span>
-          <button class="btn btn-secondary btn-sm" id="btn-refresh-schema">&#8635; Refresh</button>
-          <button class="btn btn-danger btn-sm" id="btn-reset-pending">Reset run to pending…</button>
-          <span id="schema-reset-status" style="font-size:12px; color:var(--success); margin-left:6px; opacity:0; transition:opacity 0.3s"></span>
+        <div id="graph-filter-bar">
+          <label for="graph-status-filter">Show:</label>
+          <select id="graph-status-filter">
+            <option value="all">All annotated</option>
+            <option value="pending">Pending only</option>
+            <option value="flagged">Flagged only</option>
+            <option value="approved">Approved only</option>
+          </select>
+          <label class="graph-toggle">
+            <input type="checkbox" id="graph-edges-toggle" checked>
+            Show parent edges
+          </label>
+          <div class="graph-legend">
+            <span><span class="legend-dot" style="background:#8899aa"></span>pending</span>
+            <span><span class="legend-dot" style="background:#26de81"></span>approved</span>
+            <span><span class="legend-dot" style="background:#f7b731"></span>flagged</span>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="graph-fit-btn">Fit</button>
         </div>
 
-        <div class="schema-cols">
-          <div class="schema-tree-col">
-            <div class="schema-section-hdr">Hierarchy &amp; Counts <span style="font-weight:400; font-style:italic">(click class to filter Review)</span></div>
-            <div id="schema-tree"></div>
-          </div>
-          <div class="schema-mgmt-col">
-            <div class="schema-section-hdr">User-Defined Classes</div>
-            <table class="schema-mgmt-table">
-              <thead>
-                <tr>
-                  <th>Class</th>
-                  <th style="width:130px">Parent</th>
-                  <th style="width:50px; text-align:right">Count</th>
-                  <th style="width:70px"></th>
-                </tr>
-              </thead>
-              <tbody id="schema-user-tbody"></tbody>
-            </table>
-            <div id="schema-user-empty" style="font-size:12px; color:var(--muted); padding:10px 0; display:none">No user-defined classes for this run/category.</div>
+        <div id="graph-wrap">
+          <div id="cy-container"></div>
+
+          <!-- Node detail / edit panel -->
+          <div id="graph-detail-panel">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px">
+              <div>
+                <div class="gdp-title" id="gdp-name"></div>
+                <div class="gdp-meta" id="gdp-meta"></div>
+              </div>
+              <button style="background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; padding:0 0 0 8px; line-height:1"
+                      onclick="closeGraphDetail()">×</button>
+            </div>
+
+            <div class="gdp-section">Review Status</div>
+            <div class="gdp-field">
+              <label>Status</label>
+              <select id="gdp-status">
+                <option value="pending">pending</option>
+                <option value="approved">approved</option>
+                <option value="flagged">flagged</option>
+              </select>
+            </div>
+
+            <div class="gdp-section">Parent Org</div>
+            <div class="gdp-field">
+              <label>Parent org</label>
+              <input id="gdp-parent-org" list="parent-org-list" autocomplete="off" placeholder="e.g. World Bank">
+            </div>
+            <div style="font-size:11px; color:var(--muted); margin-bottom:6px; padding-left:96px" id="gdp-parent-resolved"></div>
+
+            <div class="gdp-section">Classification</div>
+            <div class="gdp-field">
+              <label>Equiv. class</label>
+              <select id="gdp-eq-class"></select>
+            </div>
+            <div class="gdp-field">
+              <label>Region</label>
+              <input id="gdp-region" list="region-list" placeholder="e.g. Global" autocomplete="off">
+            </div>
+
+            <div class="gdp-section">Notes</div>
+            <textarea id="gdp-notes" class="form-input" rows="3" style="width:100%; margin-bottom:10px"
+                      placeholder="Annotation notes"></textarea>
+
+            <button class="btn btn-primary btn-sm" id="gdp-save-btn" style="width:100%">Save changes</button>
+            <div id="gdp-save-status" style="font-size:11px; text-align:center; margin-top:5px; min-height:16px"></div>
           </div>
         </div>
 
@@ -741,12 +726,13 @@ async function loadRuns() {
     state.runId = parseInt(sel.value);
     state.category = sel.options[sel.selectedIndex].dataset.category || null;
     state.activeIdx = null;
+    _graphItems = [];  // invalidate graph cache on run change
     updateExcludeButton();
     updateTagFieldVisibility();
     loadTagSuggestions();
     loadParentOrgSuggestions();
     loadEquivalenceClasses().then(loadQueue);
-    if (_currentMode === 'schema') loadSchemaPanel();
+    if (_currentMode === 'graph') loadGraphView();
   });
   await loadEquivalenceClasses();
   updateExcludeButton();
@@ -823,16 +809,9 @@ async function loadCountries() {
 async function loadQueue() {
   if (!state.runId) return;
   const data = await apiFetch(`/api/ontology/queue/${state.category || 'mfa'}?run_id=${state.runId}&limit=500`);
-  _fullQueue = data.items;
   state.queue = data.items;
   state.total = data.total;
   state.reviewed = data.reviewed;
-
-  // Show filter row and populate country filter now that we have data
-  const filterRow = document.getElementById('queue-filter-row');
-  if (filterRow) filterRow.style.display = data.items.length > 0 ? '' : 'none';
-  populateCountryFilter(data.items);
-
   renderQueue();
   updateProgress();
 
@@ -1448,7 +1427,9 @@ function truncate(str, n) {
 let _currentMode = 'annotate';
 let _resolutionItems = [];          // ParentOrgResolutionItem[] from last load
 let _ioOrgsByName = new Map();      // lowercase canonical_name → {org_id, canonical_name}
-let _schemaSummary = [];            // OntologyClassSummaryItem[] for schema panel
+let _cyInstance = null;             // Cytoscape instance
+let _graphItems = [];               // OntologyReviewItem[] for graph view
+let _graphSelectedMappingId = null; // currently selected node
 
 document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => setMode(btn.dataset.mode));
@@ -1462,18 +1443,18 @@ function setMode(mode) {
     b.classList.toggle('active', b.dataset.mode === mode);
   });
 
-  const sidebar    = document.getElementById('sidebar');
-  const empty      = document.getElementById('empty-state');
-  const annPanel   = document.getElementById('annotation-panel');
-  const revPanel   = document.getElementById('review-panel');
-  const resPanel   = document.getElementById('resolution-panel');
-  const schPanel   = document.getElementById('schema-panel');
-  const mainEl     = document.getElementById('main');
+  const sidebar  = document.getElementById('sidebar');
+  const empty    = document.getElementById('empty-state');
+  const annPanel = document.getElementById('annotation-panel');
+  const revPanel = document.getElementById('review-panel');
+  const resPanel = document.getElementById('resolution-panel');
+  const grpPanel = document.getElementById('graph-panel');
+  const mainEl   = document.getElementById('main');
 
   // Hide all content panels first
   revPanel.style.display = 'none';
   resPanel.style.display = 'none';
-  schPanel.style.display = 'none';
+  grpPanel.style.display = 'none';
   mainEl.style.overflow  = '';
 
   if (mode === 'annotate') {
@@ -1487,9 +1468,12 @@ function setMode(mode) {
     if (mode === 'review') {
       revPanel.style.display = 'block';
       loadReviewTable();
-    } else if (mode === 'schema') {
-      schPanel.style.display = 'block';
-      loadSchemaPanel();
+    } else if (mode === 'graph') {
+      grpPanel.style.display    = 'flex';
+      grpPanel.style.flexDirection = 'column';
+      grpPanel.style.height     = '100%';
+      mainEl.style.overflow     = 'hidden';
+      loadGraphView();
     } else {
       resPanel.style.display = 'block';
       loadResolutionQueue();
@@ -1641,11 +1625,7 @@ async function loadReviewTable() {
   if (!data) return;
   _reviewItems = data.items;
   updateReviewStats(data);
-  populateReviewClassFilter(data.items);
-  // Re-apply any active class filter
-  const filterVal = document.getElementById('rv-class-filter')?.value || '';
-  const items = filterVal ? data.items.filter(i => i.equivalence_class === filterVal) : data.items;
-  renderReviewTable(items);
+  renderReviewTable(data.items);
 }
 
 function updateReviewStats(data) {
@@ -2024,310 +2004,246 @@ document.getElementById('btn-finalize').addEventListener('click', async () => {
   setTimeout(() => { statusEl.style.opacity = '0'; }, 4000);
 });
 
-// ── Schema panel ──────────────────────────────────────────────────────────
+// ── Graph view ────────────────────────────────────────────────────────────
 
-async function loadSchemaPanel() {
-  if (!state.runId || !state.category) return;
-  const data = await apiFetch(`/api/ontology/classes/summary?run_id=${state.runId}&category=${state.category}`);
-  if (!data) return;
-  _schemaSummary = data;
-  renderSchemaTree(data);
-  renderSchemaUserClasses(data);
+function levelOf(eqClass) {
+  const cls = (state.equivalenceClasses || []).find(c => c.value === eqClass);
+  return cls ? (cls.level || 2) : 2;
 }
 
-function renderSchemaTree(items) {
-  const tree = document.getElementById('schema-tree');
-  if (!tree) return;
-  tree.innerHTML = '';
+function buildCytoscapeElements(items, showEdges) {
+  const STATUS_COLOR = { pending: '#8899aa', approved: '#26de81', flagged: '#f7b731' };
+  const orgIdToMappingId = new Map(items.map(i => [i.org_id, i.mapping_id]));
 
-  // Group by parent to build top-down tree
-  const byParent = new Map();
-  items.forEach(item => {
-    const p = item.parent_class || '__root__';
-    if (!byParent.has(p)) byParent.set(p, []);
-    byParent.get(p).push(item);
-  });
+  const nodes = items.map(item => ({
+    group: 'nodes',
+    data: {
+      id:               `n-${item.mapping_id}`,
+      mapping_id:       item.mapping_id,
+      org_id:           item.org_id,
+      label:            item.canonical_name.length > 28
+                          ? item.canonical_name.slice(0, 27) + '…'
+                          : item.canonical_name,
+      full_name:        item.canonical_name,
+      review_status:    item.review_status || 'pending',
+      equivalence_class: item.equivalence_class,
+      parent_org:       item.parent_org || '',
+      parent_org_id:    item.parent_org_id || null,
+      color:            STATUS_COLOR[item.review_status] || '#8899aa',
+      size:             ({ 1: 44, 2: 32 })[levelOf(item.equivalence_class)] || 22,
+    }
+  }));
 
-  function renderLevel(parentKey, depth) {
-    const children = byParent.get(parentKey) || [];
-    children.sort((a, b) => a.level - b.level || a.label.localeCompare(b.label));
-    children.forEach(item => {
-      const indent = depth * 18;
-      const prefix = depth > 0 ? '└ ' : '';
-      const singleton = item.count === 1;
-      const node = document.createElement('div');
-      node.className = `schema-node level-${Math.min(item.level, 4)}${singleton ? ' singleton' : ''}`;
-      node.title = `Click to filter Review by "${item.label}"`;
-      node.innerHTML = `
-        <span class="sn-indent" style="width:${indent}px">${prefix}</span>
-        <span class="sn-label">${esc(item.label)}</span>
-        ${item.is_user_defined ? '<span class="sn-user-badge">user</span>' : ''}
-        <span class="sn-count" title="${singleton ? 'Only 1 annotation — possible over-split' : item.count + ' annotations'}">${item.count}</span>
-      `;
-      node.addEventListener('click', () => {
-        setMode('review');
-        // After review table loads, set the filter
-        setTimeout(() => setReviewClassFilter(item.value), 400);
-      });
-      tree.appendChild(node);
-      renderLevel(item.value, depth + 1);
+  const edges = [];
+  if (showEdges) {
+    items.forEach(item => {
+      if (item.parent_org_id && orgIdToMappingId.has(item.parent_org_id)) {
+        const parentMappingId = orgIdToMappingId.get(item.parent_org_id);
+        if (parentMappingId !== item.mapping_id) {  // no self-loops
+          edges.push({
+            group: 'edges',
+            data: {
+              id:     `e-${item.mapping_id}`,
+              source: `n-${parentMappingId}`,
+              target: `n-${item.mapping_id}`,
+            }
+          });
+        }
+      }
     });
   }
 
-  renderLevel('__root__', 0);
-  if (!tree.children.length) {
-    tree.innerHTML = '<div style="font-size:12px; color:var(--muted); padding:8px 0">No annotations yet for this run.</div>';
-  }
+  return [...nodes, ...edges];
 }
 
-function renderSchemaUserClasses(items) {
-  const tbody = document.getElementById('schema-user-tbody');
-  const empty = document.getElementById('schema-user-empty');
-  if (!tbody) return;
-  tbody.innerHTML = '';
+function renderGraph() {
+  const statusFilter = document.getElementById('graph-status-filter').value;
+  const showEdges    = document.getElementById('graph-edges-toggle').checked;
 
-  const userItems = items.filter(i => i.is_user_defined);
-  if (!userItems.length) {
-    if (empty) empty.style.display = 'block';
+  let items = _graphItems;
+  if (statusFilter !== 'all') {
+    items = items.filter(i => (i.review_status || 'pending') === statusFilter);
+  }
+
+  const elements = buildCytoscapeElements(items, showEdges);
+  const edgeCount = elements.filter(e => e.group === 'edges').length;
+  const edgeRatio = items.length > 0 ? edgeCount / items.length : 0;
+  const layoutName = (edgeCount > 0 && edgeRatio > 0.15) ? 'breadthfirst' : 'cose';
+
+  const container = document.getElementById('cy-container');
+  if (_cyInstance) { _cyInstance.destroy(); _cyInstance = null; }
+
+  _cyInstance = cytoscape({
+    container,
+    elements,
+    style: [
+      {
+        selector: 'node',
+        style: {
+          'label':           'data(label)',
+          'text-valign':     'bottom',
+          'text-halign':     'center',
+          'font-size':       '9px',
+          'color':           '#e0e0e0',
+          'background-color': 'data(color)',
+          'width':           'data(size)',
+          'height':          'data(size)',
+          'border-width':    2,
+          'border-color':    '#2a3a5c',
+          'text-max-width':  '80px',
+          'text-wrap':       'ellipsis',
+          'min-zoomed-font-size': 7,
+        }
+      },
+      {
+        selector: 'node:selected',
+        style: {
+          'border-color': '#e94560',
+          'border-width': 3,
+        }
+      },
+      {
+        selector: 'edge',
+        style: {
+          'width':                1.5,
+          'line-color':           '#2a3a5c',
+          'target-arrow-color':   '#2a3a5c',
+          'target-arrow-shape':   'triangle',
+          'curve-style':          'bezier',
+          'opacity':              0.7,
+        }
+      }
+    ],
+    layout: {
+      name:          layoutName,
+      directed:      true,
+      padding:       40,
+      spacingFactor: 1.25,
+      animate:       false,
+      nodeDimensionsIncludeLabels: true,
+    }
+  });
+
+  _cyInstance.on('tap', 'node', evt => {
+    openGraphDetail(evt.target.data('mapping_id'));
+  });
+  _cyInstance.on('tap', evt => {
+    if (evt.target === _cyInstance) closeGraphDetail();
+  });
+}
+
+async function loadGraphView() {
+  if (!state.runId) return;
+  if (!_reviewItems.length) {
+    const data = await apiFetch(`/api/ontology/review?run_id=${state.runId}`);
+    if (!data) return;
+    _reviewItems = data.items;
+  }
+  _graphItems = _reviewItems;
+  renderGraph();
+}
+
+function openGraphDetail(mappingId) {
+  _graphSelectedMappingId = mappingId;
+  const item = _graphItems.find(i => i.mapping_id === mappingId);
+  if (!item) return;
+
+  document.getElementById('gdp-name').textContent = item.canonical_name;
+  document.getElementById('gdp-meta').textContent =
+    [item.equivalence_class, item.region, `org_id:${item.org_id}`].filter(Boolean).join(' · ');
+
+  document.getElementById('gdp-status').value      = item.review_status || 'pending';
+  document.getElementById('gdp-parent-org').value  = item.parent_org || '';
+  document.getElementById('gdp-parent-resolved').textContent =
+    item.parent_org_id
+      ? `Resolved → ${item.parent_org_resolved || item.parent_org}`
+      : (item.parent_org ? 'Not yet resolved to org record' : '');
+
+  const gdpEq = document.getElementById('gdp-eq-class');
+  gdpEq.innerHTML = (state.equivalenceClasses || [])
+    .map(c => `<option value="${esc(c.value)}"${c.value === item.equivalence_class ? ' selected' : ''}>${esc(c.label || c.value)}</option>`)
+    .join('');
+
+  document.getElementById('gdp-region').value  = item.region || '';
+  document.getElementById('gdp-notes').value   = item.annotation_notes || '';
+  document.getElementById('gdp-save-status').textContent = '';
+
+  document.getElementById('graph-detail-panel').classList.add('open');
+}
+
+function closeGraphDetail() {
+  _graphSelectedMappingId = null;
+  document.getElementById('graph-detail-panel').classList.remove('open');
+  if (_cyInstance) _cyInstance.$(':selected').unselect();
+}
+
+document.getElementById('gdp-save-btn').addEventListener('click', async () => {
+  if (!_graphSelectedMappingId) return;
+  const item = _graphItems.find(i => i.mapping_id === _graphSelectedMappingId);
+  if (!item) return;
+
+  const newStatus  = document.getElementById('gdp-status').value;
+  const newPorg    = document.getElementById('gdp-parent-org').value.trim() || null;
+  const newEqClass = document.getElementById('gdp-eq-class').value;
+  const newRegion  = document.getElementById('gdp-region').value.trim() || null;
+  const newNotes   = document.getElementById('gdp-notes').value.trim() || null;
+
+  // Ensure IO org map is loaded for parent_org_id resolution
+  if (_ioOrgsByName.size === 0) await loadResolutionQueue();
+  const porgObj  = newPorg ? _ioOrgsByName.get(newPorg.toLowerCase()) : null;
+  const newPorgId = porgObj
+    ? porgObj.org_id
+    : (newPorg === item.parent_org ? item.parent_org_id : null);
+
+  const statusEl = document.getElementById('gdp-save-status');
+  statusEl.textContent  = 'Saving…';
+  statusEl.style.color  = 'var(--muted)';
+
+  const result = await apiFetch(`/api/ontology/mappings/${item.mapping_id}`, {
+    method: 'PATCH',
+    body: {
+      review_status:     newStatus,
+      parent_org:        newPorg,
+      parent_org_id:     newPorgId,
+      equivalence_class: newEqClass,
+      region:            newRegion,
+      annotation_notes:  newNotes,
+    },
+  });
+
+  if (!result) {
+    statusEl.textContent = 'Error saving.';
+    statusEl.style.color = 'var(--danger)';
     return;
   }
-  if (empty) empty.style.display = 'none';
 
-  userItems.sort((a, b) => (a.parent_class || '').localeCompare(b.parent_class || '') || a.label.localeCompare(b.label));
-  userItems.forEach(item => {
-    const tr = document.createElement('tr');
-    const rowId = `scm-${item.value.replace(/[^a-z0-9]/gi, '_')}`;
-    tr.innerHTML = `
-      <td>
-        <div style="font-weight:500">${esc(item.label)}</div>
-        <div style="font-size:10px; color:var(--muted)">${esc(item.value)}</div>
-        <div class="schema-rename-form" id="${rowId}-form">
-          <input id="${rowId}-label" placeholder="New label" value="${esc(item.label)}" style="width:100px">
-          <input id="${rowId}-value" placeholder="New key" value="${esc(item.value)}" style="width:100px">
-          <button class="btn btn-sm btn-primary" onclick="confirmRename('${esc(item.value)}','${rowId}')">Save</button>
-          <button class="btn btn-sm btn-secondary" onclick="cancelRename('${rowId}')">Cancel</button>
-          <span id="${rowId}-status" style="font-size:11px; margin-left:4px"></span>
-        </div>
-      </td>
-      <td style="font-size:11px; color:var(--muted)">${esc(item.parent_class || '—')}</td>
-      <td style="text-align:right; font-size:12px">${item.count}</td>
-      <td><button class="btn btn-sm btn-secondary" onclick="openRename('${rowId}')">Rename</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
+  // Update local state in-place
+  if (result.review_status    !== undefined) item.review_status    = result.review_status;
+  if (result.parent_org       !== undefined) item.parent_org       = result.parent_org;
+  if (result.parent_org_id    !== undefined) item.parent_org_id    = result.parent_org_id;
+  if (result.equivalence_class !== undefined) item.equivalence_class = result.equivalence_class;
+  if (result.region           !== undefined) item.region           = result.region;
+  if (result.annotation_notes !== undefined) item.annotation_notes = result.annotation_notes;
 
-function openRename(rowId) {
-  document.querySelectorAll('.schema-rename-form.open').forEach(f => f.classList.remove('open'));
-  document.getElementById(`${rowId}-form`)?.classList.add('open');
-}
-function cancelRename(rowId) {
-  document.getElementById(`${rowId}-form`)?.classList.remove('open');
-}
+  statusEl.textContent = 'Saved ✓';
+  statusEl.style.color = 'var(--success)';
 
-async function confirmRename(oldValue, rowId) {
-  const newLabel = (document.getElementById(`${rowId}-label`)?.value || '').trim();
-  const newValue = (document.getElementById(`${rowId}-value`)?.value || '').trim().toLowerCase().replace(/\s+/g, '_');
-  const statusEl = document.getElementById(`${rowId}-status`);
-  if (!newLabel || !newValue) { if (statusEl) { statusEl.textContent = 'Required'; statusEl.style.color = 'var(--danger)'; } return; }
-
-  if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)'; }
-  const result = await apiFetch('/api/ontology/classes/rename', {
-    method: 'POST',
-    body: { run_id: state.runId, old_value: oldValue, new_value: newValue, new_label: newLabel },
-  });
-  if (!result) { if (statusEl) { statusEl.textContent = 'Error'; statusEl.style.color = 'var(--danger)'; } return; }
-
-  if (statusEl) { statusEl.textContent = `Renamed (${result.updated_count} updated)`; statusEl.style.color = 'var(--success)'; }
-  // Also update DEFAULT_PARENT in JS if the old key existed
-  if (DEFAULT_PARENT[oldValue] !== undefined) {
-    DEFAULT_PARENT[newValue] = DEFAULT_PARENT[oldValue];
-    delete DEFAULT_PARENT[oldValue];
-  }
-  setTimeout(() => { loadSchemaPanel(); loadEquivalenceClasses(); }, 800);
-}
-
-document.getElementById('btn-refresh-schema')?.addEventListener('click', loadSchemaPanel);
-
-document.getElementById('btn-reset-pending')?.addEventListener('click', async () => {
-  if (!state.runId) return;
-  const count = _schemaSummary.reduce((s, i) => s + i.count, 0);
-  if (!confirm(`Reset all ${count} annotation review statuses in this run to "pending"?\n\nThis is used before retroactive rework. Annotation data is preserved.`)) return;
-  const result = await apiFetch(`/api/ontology/runs/${state.runId}/reset-pending`, { method: 'POST' });
-  if (!result) return;
-  const statusEl = document.getElementById('schema-reset-status');
-  statusEl.textContent = `${result.reset_count} annotations reset to pending`;
-  statusEl.style.opacity = '1';
-  setTimeout(() => { statusEl.style.opacity = '0'; }, 4000);
-  loadSchemaPanel();
+  const savedId = _graphSelectedMappingId;
+  renderGraph();
+  openGraphDetail(savedId);
 });
 
-// ── Queue sort / filter (client-side) ─────────────────────────────────────
-
-let _fullQueue = [];  // unfiltered queue, set on loadQueue
-
-function initQueueFilters() {
-  const sortSel    = document.getElementById('queue-sort');
-  const countrySel = document.getElementById('queue-country-filter');
-  if (!sortSel || !countrySel) return;
-  sortSel.addEventListener('change',    applyQueueFilters);
-  countrySel.addEventListener('change', applyQueueFilters);
-}
-
-function populateCountryFilter(queue) {
-  const countrySel = document.getElementById('queue-country-filter');
-  if (!countrySel) return;
-  const countries = [...new Set(queue.map(i => i.location_country).filter(Boolean))].sort();
-  // Keep "All countries" option, replace the rest
-  countrySel.innerHTML = '<option value="">All countries</option>';
-  countries.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c; opt.textContent = c;
-    countrySel.appendChild(opt);
-  });
-}
-
-function applyQueueFilters() {
-  const sortVal    = document.getElementById('queue-sort')?.value || 'name';
-  const countryVal = document.getElementById('queue-country-filter')?.value || '';
-
-  let filtered = _fullQueue;
-  if (countryVal) filtered = filtered.filter(i => i.location_country === countryVal);
-
-  if (sortVal === 'country') {
-    filtered = [...filtered].sort((a, b) => {
-      const ca = a.location_country || '', cb = b.location_country || '';
-      return ca.localeCompare(cb) || a.canonical_name.localeCompare(b.canonical_name);
-    });
-  } else {
-    filtered = [...filtered].sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
-  }
-
-  state.queue = filtered;
-  state.activeIdx = null;
-  renderQueue();
-}
-
-// ── Review class filter & batch actions ───────────────────────────────────
-
-function initReviewFilter() {
-  const filterSel = document.getElementById('rv-class-filter');
-  if (!filterSel) return;
-  filterSel.addEventListener('change', onReviewFilterChange);
-  document.getElementById('btn-approve-all')?.addEventListener('click', batchApproveVisible);
-  document.getElementById('btn-reassign-all')?.addEventListener('click', batchReassignVisible);
-}
-
-function populateReviewClassFilter(items) {
-  const sel = document.getElementById('rv-class-filter');
-  if (!sel) return;
-  const classes = [...new Set(items.map(i => i.equivalence_class))].sort();
-  sel.innerHTML = '<option value="">All classes</option>';
-  classes.forEach(cls => {
-    const opt = document.createElement('option');
-    opt.value = cls; opt.textContent = cls;
-    sel.appendChild(opt);
-  });
-
-  // Also populate batch-reassign select
-  const batchSel = document.getElementById('batch-reassign-class');
-  if (batchSel) {
-    batchSel.innerHTML = '<option value="">— select class —</option>';
-    (state.equivalenceClasses || [])
-      .filter(c => c.level > 0 && !c.value.startsWith('not_') && c.value !== 'needs_review')
-      .forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.value; opt.textContent = c.label;
-        batchSel.appendChild(opt);
-      });
-  }
-}
-
-function onReviewFilterChange() {
-  const filterVal = document.getElementById('rv-class-filter')?.value || '';
-  const batchBar  = document.getElementById('batch-actions-bar');
-  const countEl   = document.getElementById('rv-filter-count');
-
-  let items = _reviewItems;
-  if (filterVal) {
-    items = _reviewItems.filter(i => i.equivalence_class === filterVal);
-    if (batchBar) batchBar.classList.add('visible');
-  } else {
-    if (batchBar) batchBar.classList.remove('visible');
-  }
-
-  if (countEl) countEl.textContent = filterVal ? `${items.length} orgs` : '';
-  renderReviewTable(items);
-}
-
-function setReviewClassFilter(classValue) {
-  const sel = document.getElementById('rv-class-filter');
-  if (!sel) return;
-  sel.value = classValue;
-  onReviewFilterChange();
-}
-
-async function batchApproveVisible() {
-  const filterVal = document.getElementById('rv-class-filter')?.value || '';
-  if (!filterVal) return;
-  const visibleItems = _reviewItems.filter(i => i.equivalence_class === filterVal && i.review_status === 'pending');
-  if (!visibleItems.length) return;
-  const statusEl = document.getElementById('batch-status');
-  if (statusEl) { statusEl.textContent = `Approving ${visibleItems.length}…`; statusEl.style.color = 'var(--muted)'; }
-
-  let done = 0;
-  for (const item of visibleItems) {
-    const result = await apiFetch(`/api/ontology/mappings/${item.mapping_id}`, {
-      method: 'PATCH', body: { review_status: 'approved' },
-    });
-    if (result) { item.review_status = 'approved'; done++; }
-  }
-
-  if (statusEl) { statusEl.textContent = `${done} approved ✓`; statusEl.style.color = 'var(--success)'; }
-  recalcReviewStats();
-  onReviewFilterChange();  // re-render filtered view with updated statuses
-  setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-}
-
-async function batchReassignVisible() {
-  const filterVal    = document.getElementById('rv-class-filter')?.value || '';
-  const newClass     = document.getElementById('batch-reassign-class')?.value || '';
-  if (!filterVal || !newClass) return;
-  const visibleItems = _reviewItems.filter(i => i.equivalence_class === filterVal);
-  if (!visibleItems.length) return;
-  if (!confirm(`Reassign ${visibleItems.length} "${filterVal}" annotation(s) to "${newClass}"?`)) return;
-
-  const statusEl = document.getElementById('batch-status');
-  if (statusEl) { statusEl.textContent = `Reassigning ${visibleItems.length}…`; statusEl.style.color = 'var(--muted)'; }
-
-  let done = 0;
-  for (const item of visibleItems) {
-    const result = await apiFetch(`/api/ontology/mappings/${item.mapping_id}`, {
-      method: 'PATCH', body: { equivalence_class: newClass },
-    });
-    if (result) {
-      item.equivalence_class = result.equivalence_class ?? newClass;
-      done++;
-    }
-  }
-
-  if (statusEl) { statusEl.textContent = `${done} reassigned ✓`; statusEl.style.color = 'var(--success)'; }
-  // Refresh the filter dropdown and re-render
-  populateReviewClassFilter(_reviewItems);
-  const sel = document.getElementById('rv-class-filter');
-  if (sel) sel.value = newClass;
-  onReviewFilterChange();
-  recalcReviewStats();
-  setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-}
-
-// ── Shim: was levelOf, buildCytoscapeElements, renderGraph, loadGraphView,
-//         openGraphDetail, closeGraphDetail, gdp-save-btn listener,
-//         graph-status-filter/edges-toggle/fit-btn listeners — all removed. ──
+document.getElementById('graph-status-filter').addEventListener('change', () => {
+  if (_currentMode === 'graph') renderGraph();
+});
+document.getElementById('graph-edges-toggle').addEventListener('change', () => {
+  if (_currentMode === 'graph') renderGraph();
+});
+document.getElementById('graph-fit-btn').addEventListener('click', () => {
+  if (_cyInstance) _cyInstance.fit(undefined, 40);
+});
 
 // ── Start ─────────────────────────────────────────────────────────────────
-initQueueFilters();
-initReviewFilter();
 boot();
 </script>
 </body>

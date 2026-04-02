@@ -324,6 +324,7 @@ class OntologyReviewItem(BaseModel):
     mapping_id: int
     org_id: int
     canonical_name: str
+    display_label: Optional[str] = None
     equivalence_class: str
     parent_category: Optional[str] = None
     hierarchy_path: Optional[list[str]] = None
@@ -352,6 +353,7 @@ class OntologyMappingPatch(BaseModel):
     parent_category: Optional[str] = None
     parent_org: Optional[str] = None
     parent_org_id: Optional[int] = None
+    display_label: Optional[str] = None
     region: Optional[str] = None
     thematic_tags: Optional[list[str]] = None
     annotation_notes: Optional[str] = None
@@ -363,6 +365,28 @@ class OntologyRunFinalizeResponse(BaseModel):
     evaluation_status: str
     pending_count: int  # 0 on success; >0 if blocked
     message: str
+
+
+class OntologyClassSummaryItem(BaseModel):
+    value: str
+    label: str
+    level: int
+    parent_class: Optional[str] = None
+    count: int = 0
+    is_user_defined: bool = False
+
+
+class OntologyClassRenameRequest(BaseModel):
+    run_id: int
+    old_value: str
+    new_value: str
+    new_label: str
+
+
+class OntologyClassRenameResponse(BaseModel):
+    old_value: str
+    new_value: str
+    updated_count: int
 
 
 class OntologyOrgPosition(BaseModel):

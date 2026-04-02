@@ -29,3 +29,8 @@ def index():
 @app.get("/ontology-editor", include_in_schema=False)
 def ontology_editor():
     return FileResponse(os.path.join(_static_dir, "ontology-editor.html"))
+
+
+@app.get("/ontology-editor-v1", include_in_schema=False)
+def ontology_editor_v1():
+    return FileResponse(os.path.join(_static_dir, "ontology-editor-v1.html"))
