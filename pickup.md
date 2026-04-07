@@ -1,4 +1,4 @@
-# Pickup: Ontology Editor v2 — Session Summary (2026-04-02)
+# Pickup: Ontology Editor v2 + UN Agencies Run — Session Summary (2026-04-02)
 
 ## What Was Built Today
 
@@ -14,9 +14,31 @@ Rebuilt the ontology annotation interface to support **class-first browsing** an
 |--------|------|----------|-------------|--------|
 | 5 | org_ontology_mfa_v1 | mfa | 82 | reviewed |
 | 6 | org_ontology_executive_v1 | executive | 78 | reviewed |
+| 8 | org_ontology_io_non_un_v1 | io_non_un | 168 | reviewed |
+| 10 | org_ontology_un_agencies_v1 | un_agencies | 0 | draft |
 
-- ~1,460 orgs with corpus career positions still unannotated (future runs)
+- 56 candidates in the un_agencies queue (filtered by `un_canonical_tag IS NOT NULL`)
+- A few non-UN entries in the queue (American Academy of Arts and Sciences, Sloan Foundation, NBER) — tag as `not_un_body`
+- The HLPs themselves appear in the queue as `UN:TemporaryAdvisoryBodies:HighLevelPanels:*` — annotate as `un_principal_organ` or create a user-defined sub-class
 - User-defined sub-classes: 36 entries in `prosopography.ontology_user_classes` — some with inconsistent naming (e.g., mixed casing from the executive run)
+
+### UN Agencies Schema (run_id=10)
+
+```
+united_nations_system              (L1, root)
+├── un_principal_organ             (L2) — GA, SC, ECOSOC, ICJ, Secretariat as institution
+├── un_secretariat_body            (L2) — DPPA, OCHA, DESA, Secretary-General office
+├── un_fund_or_programme           (L2) — UNDP, UNICEF, WFP, UNHCR, UNEP, UNAIDS
+├── un_formal_agency               (L2) — WHO, ILO, IMF, World Bank, WIPO (formally linked)
+└── un_related_organization        (L2) — IAEA, UNFCCC (treaty-based, not formal specialized agencies)
+
+not_un_body                        (L0, exclude)
+needs_review                       (L0, flag)
+```
+
+Note: `un_formal_agency` deliberately uses a different key from `io_non_un`'s `un_specialized_agency` to avoid class-key collision in `_DEFAULT_PARENT`.
+
+The HLPs in the queue (this project's study subjects) are `UN:TemporaryAdvisoryBodies:HighLevelPanels:*` — consider user-defined sub-class `hlp_advisory_panel` under `un_principal_organ`.
 
 ### What Needs Doing (retroactive rework)
 

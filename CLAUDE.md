@@ -78,7 +78,7 @@ The ontology editor annotates organizations into three categories (`mfa`, `execu
 - `thematic_tags` — TEXT[] added in migrate_14
 - `parent_org` — TEXT for org-to-org sub-unit relationships, added in migrate_15
 
-Active runs: run_id=5 (MFA, reviewed), run_id=6 (executive, reviewed). Runs 1–4 are earlier career-tag/typology derivatives (not org ontology).
+Active runs: run_id=5 (MFA, reviewed), run_id=6 (executive, reviewed), run_id=8 (io_non_un, reviewed), run_id=10 (un_agencies, draft — in progress). Runs 1–4 are earlier career-tag/typology derivatives (not org ontology).
 
 ### Adding a New Annotation Category
 

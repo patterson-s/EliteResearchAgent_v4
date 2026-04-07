@@ -75,12 +75,25 @@ def org_tooltip(org_id: int):
         SELECT o.org_id, o.canonical_name, o.meta_type, o.sector,
                o.location_country, o.location_city,
                o.un_hierarchical_tags, o.gov_hierarchical_tags,
-               COUNT(DISTINCT cp.person_id) AS corpus_member_count
+               COUNT(DISTINCT cp.person_id) AS corpus_member_count,
+               m.parent_category AS ontology_category,
+               m.equivalence_class AS ontology_equivalence_class,
+               m.hierarchy_path AS ontology_hierarchy_path,
+               m.thematic_tags AS ontology_thematic_tags
         FROM prosopography.organizations o
+        LEFT JOIN LATERAL (
+            SELECT parent_category, equivalence_class, hierarchy_path, thematic_tags
+            FROM prosopography.org_ontology_mappings
+            WHERE org_id = o.org_id
+              AND run_id IN (5, 6, 8)
+            ORDER BY run_id DESC
+            LIMIT 1
+        ) m ON true
         LEFT JOIN prosopography.career_positions cp ON cp.org_id = o.org_id
         WHERE o.org_id = %(org_id)s
         GROUP BY o.org_id, o.canonical_name, o.meta_type, o.sector,
-                 o.location_country, o.location_city, o.un_hierarchical_tags, o.gov_hierarchical_tags
+                 o.location_country, o.location_city, o.un_hierarchical_tags, o.gov_hierarchical_tags,
+                 m.parent_category, m.equivalence_class, m.hierarchy_path, m.thematic_tags
     """
     with get_conn() as conn:
         cur = conn.cursor()

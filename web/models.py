@@ -148,6 +148,10 @@ class OrgTooltip(BaseModel):
     un_hierarchical_tags: Optional[list[str]] = None
     gov_hierarchical_tags: Optional[list[str]] = None
     corpus_member_count: int = 0
+    ontology_category: Optional[str] = None
+    ontology_equivalence_class: Optional[str] = None
+    ontology_hierarchy_path: Optional[list[str]] = None
+    ontology_thematic_tags: Optional[list[str]] = None
 
 
 class OrgCorpusMemberRole(BaseModel):
@@ -216,6 +220,9 @@ class OntologyQueueItem(BaseModel):
     thematic_tags: Optional[list[str]] = None
     parent_org: Optional[str] = None
     parent_org_id: Optional[int] = None
+    parent_orgs: Optional[list[str]] = None
+    alias_of_org_id: Optional[int] = None
+    alias_canonical_name: Optional[str] = None
 
 
 class OntologyQueueResponse(BaseModel):
@@ -251,6 +258,8 @@ class OntologyMappingCreate(BaseModel):
     thematic_tags: Optional[list[str]] = None
     parent_org: Optional[str] = None
     parent_org_id: Optional[int] = None
+    parent_orgs: Optional[list[str]] = None
+    alias_of_org_id: Optional[int] = None
     new_class_label: Optional[str] = None  # if set, upserts a new user-defined class
 
 
@@ -271,6 +280,8 @@ class OntologyMappingResponse(BaseModel):
     thematic_tags: Optional[list[str]] = None
     parent_org: Optional[str] = None
     parent_org_id: Optional[int] = None
+    parent_orgs: Optional[list[str]] = None
+    alias_of_org_id: Optional[int] = None
     annotated_by: str
 
 
@@ -330,6 +341,7 @@ class OntologyReviewItem(BaseModel):
     hierarchy_path: Optional[list[str]] = None
     parent_org: Optional[str] = None
     parent_org_id: Optional[int] = None
+    parent_orgs: Optional[list[str]] = None
     parent_org_resolved: Optional[str] = None  # canonical_name of resolved parent org
     region: Optional[str] = None
     thematic_tags: Optional[list[str]] = None
@@ -353,11 +365,26 @@ class OntologyMappingPatch(BaseModel):
     parent_category: Optional[str] = None
     parent_org: Optional[str] = None
     parent_org_id: Optional[int] = None
+    parent_orgs: Optional[list[str]] = None
+    alias_of_org_id: Optional[int] = None
     display_label: Optional[str] = None
     region: Optional[str] = None
     thematic_tags: Optional[list[str]] = None
     annotation_notes: Optional[str] = None
     review_status: Optional[str] = None  # 'pending' | 'approved' | 'flagged'
+
+
+class OrgSearchResult(BaseModel):
+    org_id: int
+    canonical_name: str
+    un_canonical_tag: Optional[str] = None
+    meta_type: Optional[str] = None
+
+
+class OrgCreateRequest(BaseModel):
+    canonical_name: str
+    meta_type: str = "io"
+    un_canonical_tag: Optional[str] = None
 
 
 class OntologyRunFinalizeResponse(BaseModel):

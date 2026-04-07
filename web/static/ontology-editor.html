@@ -72,6 +72,11 @@ a { color: var(--accent); text-decoration: none; }
 .queue-item.reviewed .qi-dot { background: var(--success); }
 .queue-item.active .qi-dot { background: var(--accent); }
 
+.qi-alias {
+  font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 120px;
+}
+
 .qi-name {
   font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
 }
@@ -502,12 +507,17 @@ a { color: var(--accent); text-decoration: none; }
             <div class="form-hint">Optional thematic labels — e.g. "development", "security".</div>
           </div>
 
-          <label class="form-label" for="f-parent-org">Parent org</label>
+          <label class="form-label">Parent org(s)</label>
           <div>
-            <input class="form-input" id="f-parent-org" list="parent-org-list"
-                   placeholder="e.g. World Bank Group" autocomplete="off">
+            <div id="parent-org-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>
+            <div class="tag-input-row">
+              <input id="f-parent-org-input" list="parent-org-list"
+                     class="form-input" style="flex:1"
+                     placeholder="e.g. World Bank Group" autocomplete="off">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-add-parent-org">Add</button>
+            </div>
             <datalist id="parent-org-list"></datalist>
-            <div class="form-hint">Immediate parent institution — e.g. "World Bank Group" for a World Bank panel.</div>
+            <div class="form-hint">Parent institution(s) — add multiple if applicable.</div>
           </div>
 
         </div>
@@ -516,7 +526,39 @@ a { color: var(--accent); text-decoration: none; }
           <button class="btn btn-primary" id="btn-save">Save &amp; Next</button>
           <button class="btn btn-secondary" id="btn-skip">Skip</button>
           <button class="btn btn-danger btn-sm" id="btn-exclude">Mark: Exclude</button>
+          <button class="btn btn-secondary btn-sm" id="btn-alias">Mark: Alias of…</button>
           <span class="save-status" id="save-status">Saved</span>
+        </div>
+
+        <!-- Alias picker (shown when "Mark: Alias of…" is clicked) -->
+        <div id="alias-picker" style="display:none; margin-top:12px; padding:12px; border:1px solid var(--border); border-radius:6px; background:var(--bg-alt)">
+          <div style="font-size:13px; font-weight:600; margin-bottom:8px">Mark as alias of…</div>
+          <input id="f-alias-search" class="form-input" placeholder="Type org name to search…" autocomplete="off" style="margin-bottom:6px">
+          <div id="alias-search-results" style="max-height:160px; overflow-y:auto; border:1px solid var(--border); border-radius:4px; background:var(--bg); display:none"></div>
+          <div id="alias-selected-preview" style="display:none; margin-top:6px; font-size:12px; color:var(--muted)"></div>
+          <!-- Create new org panel (shown after search results render) -->
+          <div id="alias-create-wrap" style="display:none; margin-top:8px; border-top:1px solid var(--border); padding-top:8px">
+            <div style="font-size:12px; color:var(--muted); margin-bottom:6px">Not found? Create a new canonical org:</div>
+            <input id="f-create-org-name" class="form-input" placeholder="Canonical name…" style="margin-bottom:4px">
+            <select id="f-create-org-type" class="form-input" style="margin-bottom:4px">
+              <option value="io">IO (Intergovernmental)</option>
+              <option value="gov">Government</option>
+              <option value="ngo">NGO</option>
+              <option value="other">Other</option>
+            </select>
+            <input id="f-create-org-tag" class="form-input" placeholder="UN tag (optional, e.g. UN:PrincipalOrgans:SecurityCouncil)" style="margin-bottom:6px">
+            <button class="btn btn-secondary btn-sm" id="btn-create-org">Create &amp; select</button>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:10px">
+            <button class="btn btn-primary btn-sm" id="btn-alias-confirm" disabled>Confirm alias</button>
+            <button class="btn btn-secondary btn-sm" id="btn-alias-cancel">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Alias state display (shown when org is already annotated as alias) -->
+        <div id="alias-state" style="display:none; margin-top:12px; padding:10px 12px; border-left:3px solid var(--accent); background:var(--bg-alt); font-size:13px">
+          <span id="alias-state-label"></span>
+          <button class="btn btn-secondary btn-sm" id="btn-alias-unlink" style="margin-left:12px">Unlink alias</button>
         </div>
 
         <!-- Un-review button (shown only for already-reviewed orgs) -->
@@ -649,7 +691,8 @@ let state = {
   parentOrgSuggestions: new Set(),
 };
 
-let currentTags = [];   // thematic tags for the currently-selected org
+let currentTags = [];       // thematic tags for the currently-selected org
+let currentParentOrgs = []; // parent orgs (multi-value) for the currently-selected org
 
 // Categories that stop context cascade at Tier 1 (direct FK only — no phrase/sibling fallback)
 const DIRECT_ONLY_CONTEXT_CATEGORIES = new Set(['io_non_un']);
@@ -682,6 +725,25 @@ const DEFAULT_PARENT = {
   economic_cooperation_forum:     'intergovernmental_organization',
   un_specialized_agency:          'intergovernmental_organization',
   intergovernmental_panel:        'intergovernmental_organization',
+  // UN system (un_agencies) — L2
+  // Note: un_specialized_agency is shared with io_non_un but with a different parent.
+  // Use getDefaultParent() (category-aware) instead of DEFAULT_PARENT[] directly.
+  united_nations_system:          null,
+  un_principal_organ:             'united_nations_system',
+  un_secretariat:                 'united_nations_system',
+  un_funds_programmes:            'united_nations_system',
+  un_specialized_agency:          'united_nations_system',   // overridden in io_non_un by getDefaultParent
+  un_peace_security:              'united_nations_system',
+  un_research_training:           'united_nations_system',
+  un_human_rights:                'united_nations_system',
+  // UN system — L3 under un_funds_programmes
+  un_dev_programme:               'un_funds_programmes',
+  un_humanitarian:                'un_funds_programmes',
+  // UN system — L3 under un_specialized_agency
+  un_dev_social_agency:           'un_specialized_agency',
+  un_technical_agency:            'un_specialized_agency',
+  un_finance_trade_agency:        'un_specialized_agency',
+  not_un_body:                    null,
 };
 
 // Snapshot of hardcoded class values — taken after DEFAULT_PARENT is fully defined,
@@ -703,14 +765,30 @@ const GRANDPARENT = {
   national_security_council: 'national_government',
   executive_advisory:        'national_government',
   special_envoy:             'national_government',
+  // UN system L3 (grandparent is always united_nations_system)
+  un_dev_programme:          'united_nations_system',
+  un_humanitarian:           'united_nations_system',
+  un_dev_social_agency:      'united_nations_system',
+  un_technical_agency:       'united_nations_system',
+  un_finance_trade_agency:   'united_nations_system',
 };
 
+// Category-aware parent lookup. un_specialized_agency has different parents in
+// io_non_un (intergovernmental_organization) vs un_agencies (united_nations_system).
+// DEFAULT_PARENT stores the un_agencies value; io_non_un overrides it here.
+function getDefaultParent(eqClass) {
+  if (state.category === 'io_non_un' && eqClass === 'un_specialized_agency') {
+    return 'intergovernmental_organization';
+  }
+  return DEFAULT_PARENT[eqClass] ?? null;
+}
+
 function computeHierarchyPath(eqClass, parentCategory, _depth = 0) {
-  if (!eqClass || eqClass === 'not_mfa' || eqClass === 'not_executive' || eqClass === 'not_io_body' || eqClass === 'needs_review') return [];
+  if (!eqClass || eqClass === 'not_mfa' || eqClass === 'not_executive' || eqClass === 'not_io_body' || eqClass === 'not_un_body' || eqClass === 'alias' || eqClass === 'needs_review') return [];
   if (_depth > 6) return [eqClass]; // guard against infinite loops
-  const parent = parentCategory || DEFAULT_PARENT[eqClass] || null;
+  const parent = parentCategory || getDefaultParent(eqClass) || null;
   if (!parent) return [eqClass];
-  const parentPath = computeHierarchyPath(parent, DEFAULT_PARENT[parent] || null, _depth + 1);
+  const parentPath = computeHierarchyPath(parent, getDefaultParent(parent) || null, _depth + 1);
   return [...parentPath, eqClass];
 }
 
@@ -853,9 +931,13 @@ function renderQueue() {
       (item.is_reviewed ? ' reviewed' : '') +
       (idx === state.activeIdx ? ' active' : '');
     el.dataset.idx = idx;
+    const aliasLabel = item.equivalence_class === 'alias' && item.alias_canonical_name
+      ? `<div class="qi-alias" title="alias of: ${esc(item.alias_canonical_name)}">↳ ${esc(truncate(item.alias_canonical_name, 24))}</div>`
+      : '';
     el.innerHTML = `
       <div class="qi-dot"></div>
       <div class="qi-name" title="${esc(item.canonical_name)}">${esc(truncate(item.canonical_name, 36))}</div>
+      ${aliasLabel}
       <div class="qi-country">${item.location_country || ''}</div>
     `;
     el.addEventListener('click', () => selectOrg(idx));
@@ -921,15 +1003,33 @@ function selectOrg(idx) {
   document.getElementById('f-dest-org').value = item.destination_organization || '';
   document.getElementById('f-superior').value = item.superior || '';
   // For already-reviewed orgs, restore the saved parent; for new ones, auto-compute from class
-  parentSel.value = item.parent_category || DEFAULT_PARENT[item.equivalence_class] || '';
+  parentSel.value = item.parent_category || getDefaultParent(item.equivalence_class) || '';
   document.getElementById('f-label').value = item.display_label || '';
   document.getElementById('f-notes').value = item.annotation_notes || '';
-  // Restore thematic tags and parent org for already-reviewed orgs
+  // Restore thematic tags and parent orgs for already-reviewed orgs
   currentTags = Array.isArray(item.thematic_tags) ? [...item.thematic_tags] : (item.thematic_tags || []);
   renderTagChips();
-  document.getElementById('f-parent-org').value = item.parent_org || '';
+  // parent_orgs (multi-value); fall back to legacy parent_org if parent_orgs empty
+  const storedParentOrgs = Array.isArray(item.parent_orgs) ? item.parent_orgs.filter(Boolean) : [];
+  currentParentOrgs = storedParentOrgs.length
+    ? [...storedParentOrgs]
+    : (item.parent_org ? [item.parent_org] : []);
+  renderParentOrgChips();
   updateHierarchyDisplay();
   updateSubclassField();
+
+  // Alias state display
+  const aliasState = document.getElementById('alias-state');
+  const aliasPicker = document.getElementById('alias-picker');
+  aliasPicker.style.display = 'none';
+  if (item.equivalence_class === 'alias' && item.alias_canonical_name) {
+    aliasState.style.display = 'block';
+    document.getElementById('alias-state-label').textContent =
+      `This org is annotated as an alias of: ${item.alias_canonical_name}`;
+    document.getElementById('btn-alias-unlink').dataset.mappingId = item.mapping_id || '';
+  } else {
+    aliasState.style.display = 'none';
+  }
 
   // Un-review button
   const unreviewWrap = document.getElementById('unreview-wrap');
@@ -1019,10 +1119,10 @@ async function loadOrgContext(orgId) {
   };
   note.textContent = notes[data.match_type] || '';
 
-  // Show split button only when there are direct matches with multiple distinct titles
+  // Show split button whenever there are direct org_id-linked positions (any number of titles)
   const splitWrap = document.getElementById('split-org-wrap');
   const uniqueTitles = [...new Set(data.positions.map(p => p.title))];
-  splitWrap.style.display = (data.match_type === 'direct' && uniqueTitles.length > 1) ? 'block' : 'none';
+  splitWrap.style.display = (data.match_type === 'direct' && uniqueTitles.length >= 1) ? 'block' : 'none';
 
   // Store for modal use
   window._splitContext = { orgId: orgId, positions: data.positions, uniqueTitles };
@@ -1030,20 +1130,24 @@ async function loadOrgContext(orgId) {
 
 function openSplitModal() {
   const { positions, uniqueTitles } = window._splitContext || {};
-  if (!uniqueTitles || !uniqueTitles.length) return;
+  if (!uniqueTitles) return;
 
+  const currentName = document.getElementById('org-name')?.textContent?.trim() || '';
   const container = document.getElementById('split-rows');
   container.innerHTML = '';
-  uniqueTitles.forEach((title, i) => {
-    const currentName = document.getElementById('org-name')?.textContent?.trim() || '';
-    const proposed = `${currentName} — ${title}`;
-    container.innerHTML += `
-      <div style="margin-bottom:12px; padding:10px; background:var(--surface2,#f9fafb); border:1px solid var(--border); border-radius:6px">
-        <div style="font-size:11px; color:var(--muted); margin-bottom:4px">Title: <strong>${esc(title)}</strong></div>
-        <label style="font-size:11px; display:block; margin-bottom:2px">New org name</label>
-        <input type="text" id="split-name-${i}" value="${esc(proposed)}"
-               style="width:100%; box-sizing:border-box; padding:5px 8px; font-size:12px; border:1px solid var(--border); border-radius:4px; background:var(--surface,#fff)">
-      </div>`;
+
+  // One row per unique title; if only 1 title, still show 1 row so user can rename/extract
+  const rows = uniqueTitles.length ? uniqueTitles : [''];
+  rows.forEach((title, i) => {
+    const proposed = title ? `${currentName} — ${title}` : currentName;
+    const row = document.createElement('div');
+    row.style.cssText = 'margin-bottom:12px; padding:10px; background:var(--surface2,#f9fafb); border:1px solid var(--border); border-radius:6px';
+    row.innerHTML = `
+      ${title ? `<div style="font-size:11px; color:var(--muted); margin-bottom:4px">Title: <strong>${esc(title)}</strong></div>` : ''}
+      <label style="font-size:11px; display:block; margin-bottom:2px">New org name</label>
+      <input type="text" id="split-name-${i}" value="${esc(proposed)}"
+             style="width:100%; box-sizing:border-box; padding:5px 8px; font-size:12px; border:1px solid var(--border); border-radius:4px; background:var(--surface,#fff)">`;
+    container.appendChild(row);
   });
 
   document.getElementById('split-modal').style.display = 'flex';
@@ -1165,8 +1269,34 @@ function addTag(raw) {
   document.getElementById('f-tag-input').value = '';
 }
 
+// ── Parent org chip management ────────────────────────────────────────────
+function renderParentOrgChips() {
+  const container = document.getElementById('parent-org-chips');
+  container.innerHTML = '';
+  currentParentOrgs.forEach((org, idx) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `${esc(org)}<span class="chip-remove" data-idx="${idx}" title="Remove">×</span>`;
+    chip.querySelector('.chip-remove').addEventListener('click', () => {
+      currentParentOrgs.splice(idx, 1);
+      renderParentOrgChips();
+    });
+    container.appendChild(chip);
+  });
+}
+
+function addParentOrg(raw) {
+  const org = raw.trim();
+  if (!org || currentParentOrgs.includes(org)) return;
+  currentParentOrgs.push(org);
+  renderParentOrgChips();
+  document.getElementById('f-parent-org-input').value = '';
+}
+
+const CATEGORIES_WITH_TAGS = new Set(['io_non_un', 'un_agencies']);
+
 async function loadTagSuggestions() {
-  if (state.category !== 'io_non_un' || !state.runId) return;
+  if (!CATEGORIES_WITH_TAGS.has(state.category) || !state.runId) return;
   const data = await apiFetch(
     `/api/ontology/autocomplete/thematic-tags?category=${state.category}&run_id=${state.runId}`
   );
@@ -1176,7 +1306,7 @@ async function loadTagSuggestions() {
 }
 
 function updateTagFieldVisibility() {
-  const show = (state.category === 'io_non_un');
+  const show = CATEGORIES_WITH_TAGS.has(state.category);
   document.getElementById('thematic-tags-label').style.display = show ? 'block' : 'none';
   document.getElementById('thematic-tags-wrap').style.display  = show ? 'block' : 'none';
 }
@@ -1246,7 +1376,8 @@ async function saveCurrentOrg(advanceNext = true) {
     annotation_notes:    document.getElementById('f-notes').value.trim() || null,
     region:              document.getElementById('f-region').value.trim() || null,
     thematic_tags:       currentTags,
-    parent_org:          document.getElementById('f-parent-org').value.trim() || null,
+    parent_org:          currentParentOrgs[0] || null,
+    parent_orgs:         currentParentOrgs,
     new_class_label:     newClassLabel,
   };
 
@@ -1273,6 +1404,7 @@ async function saveCurrentOrg(advanceNext = true) {
     region:              result.region,
     thematic_tags:       result.thematic_tags || [],
     parent_org:          result.parent_org,
+    parent_orgs:         result.parent_orgs || [],
   });
 
   if (!wasReviewed) { state.reviewed++; updateProgress(); }
@@ -1350,6 +1482,140 @@ document.getElementById('btn-unreview').addEventListener('click', async () => {
   if (mappingId) await deleteMapping(parseInt(mappingId));
 });
 
+// ── Alias picker ──────────────────────────────────────────────────────────
+
+let _aliasSelectedId = null;
+let _aliasSelectedName = null;
+let _aliasSearchTimer = null;
+
+document.getElementById('btn-alias').addEventListener('click', () => {
+  document.getElementById('alias-picker').style.display = 'block';
+  document.getElementById('alias-state').style.display = 'none';
+  document.getElementById('f-alias-search').value = '';
+  document.getElementById('alias-search-results').style.display = 'none';
+  document.getElementById('alias-selected-preview').style.display = 'none';
+  document.getElementById('btn-alias-confirm').disabled = true;
+  document.getElementById('alias-create-wrap').style.display = 'none';
+  document.getElementById('f-create-org-name').value = '';
+  document.getElementById('f-create-org-tag').value = '';
+  _aliasSelectedId = null;
+  _aliasSelectedName = null;
+  document.getElementById('f-alias-search').focus();
+});
+
+document.getElementById('btn-alias-cancel').addEventListener('click', () => {
+  document.getElementById('alias-picker').style.display = 'none';
+  // Restore alias state if already annotated
+  const item = state.activeIdx !== null ? state.queue[state.activeIdx] : null;
+  if (item && item.equivalence_class === 'alias' && item.alias_canonical_name) {
+    document.getElementById('alias-state').style.display = 'block';
+  }
+});
+
+document.getElementById('f-alias-search').addEventListener('input', e => {
+  clearTimeout(_aliasSearchTimer);
+  const q = e.target.value.trim();
+  if (q.length < 2) {
+    document.getElementById('alias-search-results').style.display = 'none';
+    return;
+  }
+  _aliasSearchTimer = setTimeout(async () => {
+    const results = await apiFetch(`/api/ontology/orgs/search?q=${encodeURIComponent(q)}&limit=10`);
+    if (!Array.isArray(results)) return;
+    const container = document.getElementById('alias-search-results');
+    if (!results.length) {
+      container.innerHTML = '<div style="padding:8px; font-size:12px; color:var(--muted)">No results</div>';
+    } else {
+      container.innerHTML = results.map(r =>
+        `<div class="alias-result" data-id="${r.org_id}" data-name="${esc(r.canonical_name)}"
+              style="padding:6px 10px; cursor:pointer; font-size:12px; border-bottom:1px solid var(--border)">
+           <strong>${esc(r.canonical_name)}</strong>
+           ${r.un_canonical_tag ? `<span style="color:var(--muted); margin-left:6px">${esc(r.un_canonical_tag)}</span>` : ''}
+         </div>`
+      ).join('');
+      container.querySelectorAll('.alias-result').forEach(el => {
+        el.addEventListener('click', () => {
+          _aliasSelectedId = parseInt(el.dataset.id);
+          _aliasSelectedName = el.dataset.name;
+          document.getElementById('alias-selected-preview').textContent = `Will mark as alias of: ${_aliasSelectedName}`;
+          document.getElementById('alias-selected-preview').style.display = 'block';
+          document.getElementById('btn-alias-confirm').disabled = false;
+          container.querySelectorAll('.alias-result').forEach(r => r.style.background = '');
+          el.style.background = 'rgba(233,69,96,0.1)';
+        });
+      });
+    }
+    container.style.display = 'block';
+    // Show create panel and pre-fill with current search term
+    document.getElementById('f-create-org-name').value = q;
+    document.getElementById('alias-create-wrap').style.display = 'block';
+  }, 250);
+});
+
+document.getElementById('btn-create-org').addEventListener('click', async () => {
+  const name = document.getElementById('f-create-org-name').value.trim();
+  if (!name) return;
+  const tag = document.getElementById('f-create-org-tag').value.trim();
+  const result = await apiFetch('/api/ontology/orgs/create', {
+    method: 'POST',
+    body: {
+      canonical_name: name,
+      meta_type: document.getElementById('f-create-org-type').value,
+      un_canonical_tag: tag || null,
+    },
+  });
+  if (result && result.org_id) {
+    _aliasSelectedId = result.org_id;
+    _aliasSelectedName = result.canonical_name;
+    document.getElementById('alias-selected-preview').textContent =
+      `Will mark as alias of: ${result.canonical_name} (newly created, org_id=${result.org_id})`;
+    document.getElementById('alias-selected-preview').style.display = 'block';
+    document.getElementById('btn-alias-confirm').disabled = false;
+    document.getElementById('alias-create-wrap').style.display = 'none';
+  }
+});
+
+document.getElementById('btn-alias-confirm').addEventListener('click', async () => {
+  if (!_aliasSelectedId || state.activeIdx === null) return;
+  const item = state.queue[state.activeIdx];
+  const result = await apiFetch('/api/ontology/mappings', {
+    method: 'POST',
+    body: {
+      org_id: item.org_id,
+      run_id: state.runId,
+      equivalence_class: 'alias',
+      alias_of_org_id: _aliasSelectedId,
+      display_label: `Alias of: ${_aliasSelectedName}`,
+    },
+  });
+  if (result && result.mapping_id) {
+    // Update local queue item
+    Object.assign(state.queue[state.activeIdx], {
+      is_reviewed: true,
+      mapping_id: result.mapping_id,
+      equivalence_class: 'alias',
+      alias_of_org_id: _aliasSelectedId,
+      alias_canonical_name: _aliasSelectedName,
+    });
+    state.reviewed = state.queue.filter(i => i.is_reviewed).length;
+    document.getElementById('alias-picker').style.display = 'none';
+    renderQueue();
+    updateProgress();
+    showSaveStatus('Alias saved.');
+    // Advance to next unreviewed
+    const next = state.queue.findIndex((it, i) => i > state.activeIdx && !it.is_reviewed);
+    if (next !== -1) selectOrg(next);
+    else selectOrg(state.activeIdx);
+  }
+});
+
+document.getElementById('btn-alias-unlink').addEventListener('click', async () => {
+  const mappingId = parseInt(document.getElementById('btn-alias-unlink').dataset.mappingId);
+  if (!mappingId) return;
+  await deleteMapping(mappingId);
+  document.getElementById('alias-state').style.display = 'none';
+});
+
 // Tag input event listeners
 document.getElementById('f-tag-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); addTag(e.target.value); }
@@ -1357,12 +1623,18 @@ document.getElementById('f-tag-input').addEventListener('keydown', e => {
 document.getElementById('btn-add-tag').addEventListener('click', () => {
   addTag(document.getElementById('f-tag-input').value);
 });
+document.getElementById('f-parent-org-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addParentOrg(e.target.value); }
+});
+document.getElementById('btn-add-parent-org').addEventListener('click', () => {
+  addParentOrg(document.getElementById('f-parent-org-input').value);
+});
 
 // Auto-update display label suggestion when class + country change
 document.getElementById('f-eq-class').addEventListener('change', () => {
   // Auto-set parent to the default for this class (user can override)
   const cls = document.getElementById('f-eq-class').value;
-  const defaultParent = DEFAULT_PARENT[cls] || '';
+  const defaultParent = getDefaultParent(cls) || '';
   const parentSel = document.getElementById('f-parent');
   // Only auto-set if user hasn't manually chosen something
   if (parentSel.dataset.userSet !== 'true') {
@@ -1411,6 +1683,21 @@ function suggestLabel() {
     case 'executive_advisory':          suggested = `Executive Advisory Body (${country || '?'})`; break;
     case 'special_envoy':               suggested = superior ? `Envoy / Special Representative of ${superior} (${country || '?'})` : `Envoy / Special Representative (${country || '?'})`; break;
     case 'presidential_campaign':       suggested = superior ? `Presidential Campaign of ${superior} (${country || '?'})` : `Presidential Campaign (${country || '?'})`; break;
+    // UN system (un_agencies) — L1/L2
+    case 'united_nations_system':   suggested = 'United Nations System'; break;
+    case 'un_principal_organ':      suggested = superior || 'UN Principal Organ'; break;
+    case 'un_secretariat':          suggested = superior || 'UN Secretariat Body'; break;
+    case 'un_funds_programmes':     suggested = superior || 'UN Fund / Programme'; break;
+    case 'un_peace_security':       suggested = superior || 'UN Peace & Security Body'; break;
+    case 'un_research_training':    suggested = superior || 'UN Research / Training Institute'; break;
+    case 'un_human_rights':         suggested = superior || 'UN Human Rights Body'; break;
+    // UN system (un_agencies) — L3
+    case 'un_specialized_agency':   suggested = superior || 'UN Specialized Agency'; break;
+    case 'un_dev_programme':        suggested = superior || 'UN Development Programme'; break;
+    case 'un_humanitarian':         suggested = superior || 'UN Humanitarian Agency'; break;
+    case 'un_dev_social_agency':    suggested = superior || 'UN Development & Social Agency'; break;
+    case 'un_technical_agency':     suggested = superior || 'UN Technical Agency'; break;
+    case 'un_finance_trade_agency': suggested = superior || 'UN Finance & Trade Agency'; break;
     default: return;
   }
 

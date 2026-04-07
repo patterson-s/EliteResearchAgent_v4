@@ -37,6 +37,8 @@ from web.models import (
     OntologyClassSummaryItem,
     OntologyClassRenameRequest,
     OntologyClassRenameResponse,
+    OrgSearchResult,
+    OrgCreateRequest,
 )
 
 router = APIRouter()
@@ -71,10 +73,30 @@ _DEFAULT_PARENT: dict[str, Optional[str]] = {
     "economic_cooperation_forum":     "intergovernmental_organization",
     "un_specialized_agency":          "intergovernmental_organization",
     "intergovernmental_panel":        "intergovernmental_organization",
+    # UN system (un_agencies) — L2
+    # Note: un_specialized_agency is also used by io_non_un (parent=intergovernmental_organization).
+    # The form always sends parent_category explicitly, so _DEFAULT_PARENT is a fallback only.
+    # For un_agencies annotations, parent_category is set by the JS form (getDefaultParent).
+    "united_nations_system":       None,
+    "un_principal_organ":          "united_nations_system",
+    "un_secretariat":              "united_nations_system",
+    "un_funds_programmes":         "united_nations_system",
+    "un_specialized_agency":       "united_nations_system",
+    "un_peace_security":           "united_nations_system",
+    "un_research_training":        "united_nations_system",
+    "un_human_rights":             "united_nations_system",
+    # UN system — L3 under un_funds_programmes
+    "un_dev_programme":            "un_funds_programmes",
+    "un_humanitarian":             "un_funds_programmes",
+    # UN system — L3 under un_specialized_agency
+    "un_dev_social_agency":        "un_specialized_agency",
+    "un_technical_agency":         "un_specialized_agency",
+    "un_finance_trade_agency":     "un_specialized_agency",
     # Catch-all
     "not_mfa":                     None,
     "not_executive":               None,
     "not_io_body":                 None,
+    "not_un_body":                 None,
     "needs_review":                None,
 }
 
@@ -93,6 +115,12 @@ _GRANDPARENT: dict[str, Optional[str]] = {
     "national_security_council": "national_government",
     "executive_advisory":        "national_government",
     "special_envoy":             "national_government",
+    # UN system L3 grandparents (parent is L2, grandparent is always united_nations_system)
+    "un_dev_programme":            "united_nations_system",
+    "un_humanitarian":             "united_nations_system",
+    "un_dev_social_agency":        "united_nations_system",
+    "un_technical_agency":         "united_nations_system",
+    "un_finance_trade_agency":     "united_nations_system",
 }
 
 
@@ -102,7 +130,7 @@ def _compute_hierarchy_path(
 ) -> list[str]:
     parent = parent_category or _DEFAULT_PARENT.get(equivalence_class)
     if not parent:
-        return [equivalence_class] if equivalence_class not in ("not_mfa", "not_executive", "not_io_body", "needs_review") else []
+        return [equivalence_class] if equivalence_class not in ("not_mfa", "not_executive", "not_io_body", "not_un_body", "alias", "needs_review") else []
     gp = _GRANDPARENT.get(equivalence_class)
     if gp:
         return [gp, parent, equivalence_class]
@@ -198,6 +226,27 @@ CATEGORY_CONFIG: dict[str, dict] = {
             AND o.canonical_name NOT ILIKE '%%UNDP%%'
         """,
     },
+
+    "un_agencies": {
+        "equivalence_classes": [
+            {"value": "united_nations_system",   "label": "UN — System (root)",                        "level": 1},
+            {"value": "un_principal_organ",      "label": "UN — Principal Organ",                      "level": 2},
+            {"value": "un_secretariat",          "label": "UN — Secretariat",                          "level": 2},
+            {"value": "un_funds_programmes",     "label": "UN — Funds, Programmes & Other Bodies",     "level": 2},
+            {"value": "un_dev_programme",        "label": "UN — Funds › Development Programme",        "level": 3},
+            {"value": "un_humanitarian",         "label": "UN — Funds › Humanitarian Agency",          "level": 3},
+            {"value": "un_specialized_agency",   "label": "UN — Specialized Agency",                   "level": 2},
+            {"value": "un_dev_social_agency",    "label": "UN — Agencies › Development & Social",      "level": 3},
+            {"value": "un_technical_agency",     "label": "UN — Agencies › Technical & Regulatory",    "level": 3},
+            {"value": "un_finance_trade_agency", "label": "UN — Agencies › Finance & Trade",           "level": 3},
+            {"value": "un_peace_security",       "label": "UN — Peace & Security",                     "level": 2},
+            {"value": "un_research_training",    "label": "UN — Research & Training",                  "level": 2},
+            {"value": "un_human_rights",         "label": "UN — Human Rights",                         "level": 2},
+            {"value": "not_un_body",             "label": "Not UN Body (exclude)",                     "level": 0},
+            {"value": "needs_review",            "label": "Needs Review",                              "level": 0},
+        ],
+        "candidate_where": "o.un_canonical_tag IS NOT NULL",
+    },
 }
 
 
@@ -208,6 +257,12 @@ _SEED_TAGS: dict[str, list[str]] = {
         "humanitarian", "human_rights", "intellectual_property",
         "labor", "maritime", "migration", "nuclear", "peacekeeping",
         "regional_integration", "security", "trade",
+    ],
+    "un_agencies": [
+        "climate", "coordination", "development", "education_culture",
+        "environment", "food_agriculture", "governance", "health",
+        "humanitarian", "human_rights", "labor", "migration",
+        "peace_security", "refugee", "science_technology", "trade_finance",
     ],
 }
 
@@ -273,11 +328,23 @@ def get_queue(
             oom.destination_country, oom.destination_organization, oom.superior,
             oom.parent_category, oom.hierarchy_path, oom.display_label,
             oom.annotation_notes, oom.region, COALESCE(oom.thematic_tags, ARRAY[]::TEXT[]) AS thematic_tags,
-            oom.parent_org, oom.parent_org_id
+            oom.parent_org, oom.parent_org_id, COALESCE(oom.parent_orgs, ARRAY[]::TEXT[]) AS parent_orgs,
+            oom.alias_of_org_id,
+            (SELECT canonical_name FROM prosopography.organizations WHERE org_id = oom.alias_of_org_id) AS alias_canonical_name
         FROM prosopography.organizations o
         LEFT JOIN prosopography.org_ontology_mappings oom
             ON oom.org_id = o.org_id AND oom.run_id = %(run_id)s
         WHERE {where} {country_filter}
+          AND (
+            oom.mapping_id IS NOT NULL
+            OR NOT EXISTS (
+                SELECT 1 FROM prosopography.org_ontology_mappings oom_other
+                WHERE oom_other.org_id = o.org_id
+                  AND oom_other.run_id != %(run_id)s
+                  AND oom_other.equivalence_class !~ '^not_'
+                  AND oom_other.equivalence_class NOT IN ('needs_review', 'alias')
+            )
+          )
         ORDER BY {order_clause}
         LIMIT %(limit)s OFFSET %(offset)s
     """
@@ -285,6 +352,13 @@ def get_queue(
         SELECT COUNT(DISTINCT o.org_id)
         FROM prosopography.organizations o
         WHERE {where} {country_filter}
+          AND NOT EXISTS (
+              SELECT 1 FROM prosopography.org_ontology_mappings oom_other
+              WHERE oom_other.org_id = o.org_id
+                AND oom_other.run_id != %(run_id)s
+                AND oom_other.equivalence_class !~ '^not_'
+                AND oom_other.equivalence_class NOT IN ('needs_review', 'alias')
+          )
     """
     reviewed_sql = f"""
         SELECT COUNT(*)
@@ -295,7 +369,7 @@ def get_queue(
 
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute(count_sql, params_extra)
+        cur.execute(count_sql, {"run_id": run_id, **params_extra})
         total = cur.fetchone()[0]
         cur.execute(reviewed_sql, {"run_id": run_id, **params_extra})
         reviewed = cur.fetchone()[0]
@@ -452,6 +526,40 @@ def get_countries():
     return countries
 
 
+@router.get("/orgs/search", response_model=list[OrgSearchResult])
+def search_orgs(q: str = Query(..., min_length=2), limit: int = Query(10, le=30)):
+    """Search organizations by name — used by the alias picker UI."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT org_id, canonical_name, un_canonical_tag, meta_type
+            FROM prosopography.organizations
+            WHERE canonical_name ILIKE %(q)s
+            ORDER BY canonical_name
+            LIMIT %(limit)s
+        """, {"q": f"%{q}%", "limit": limit})
+        rows = rows_to_dicts(cur)
+        cur.close()
+    return [OrgSearchResult(**r) for r in rows]
+
+
+@router.post("/orgs/create", response_model=OrgSearchResult)
+def create_org(body: OrgCreateRequest):
+    """Create a new organization row — used when alias target doesn't exist yet."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO prosopography.organizations (canonical_name, meta_type, un_canonical_tag, source)
+            VALUES (%(name)s, %(meta_type)s, %(un_canonical_tag)s, 'manual_annotation')
+            RETURNING org_id, canonical_name, un_canonical_tag, meta_type
+        """, {"name": body.canonical_name, "meta_type": body.meta_type,
+              "un_canonical_tag": body.un_canonical_tag})
+        row = row_to_dict(cur, cur.fetchone())
+        conn.commit()
+        cur.close()
+    return OrgSearchResult(**row)
+
+
 # ── Mappings (write) ──────────────────────────────────────────────────────────
 
 @router.post("/mappings", response_model=OntologyMappingResponse)
@@ -465,13 +573,13 @@ def save_mapping(body: OntologyMappingCreate):
                 org_id, run_id, equivalence_class, country_code, destination_country,
                 destination_organization, superior, parent_category, hierarchy_path,
                 display_label, annotation_notes, region, thematic_tags,
-                parent_org, parent_org_id, annotated_by, updated_at
+                parent_org, parent_org_id, parent_orgs, alias_of_org_id, annotated_by, updated_at
             )
             VALUES (
                 %(org_id)s, %(run_id)s, %(equivalence_class)s, %(country_code)s, %(destination_country)s,
                 %(destination_organization)s, %(superior)s, %(parent_category)s, %(hierarchy_path)s,
                 %(display_label)s, %(annotation_notes)s, %(region)s, %(thematic_tags)s::TEXT[],
-                %(parent_org)s, %(parent_org_id)s, 'manual', now()
+                %(parent_org)s, %(parent_org_id)s, %(parent_orgs)s::TEXT[], %(alias_of_org_id)s, 'manual', now()
             )
             ON CONFLICT (org_id, run_id) DO UPDATE SET
                 equivalence_class        = EXCLUDED.equivalence_class,
@@ -488,12 +596,14 @@ def save_mapping(body: OntologyMappingCreate):
                 parent_org               = EXCLUDED.parent_org,
                 parent_org_id            = COALESCE(EXCLUDED.parent_org_id,
                                                      org_ontology_mappings.parent_org_id),
+                parent_orgs              = EXCLUDED.parent_orgs,
+                alias_of_org_id          = EXCLUDED.alias_of_org_id,
                 updated_at               = now()
             RETURNING
                 mapping_id, org_id, run_id, equivalence_class, country_code, destination_country,
                 destination_organization, superior, parent_category, hierarchy_path,
                 display_label, annotation_notes, region, thematic_tags,
-                parent_org, parent_org_id, annotated_by
+                parent_org, parent_org_id, parent_orgs, alias_of_org_id, annotated_by
         """, {
             "org_id":                    body.org_id,
             "run_id":                    body.run_id,
@@ -510,6 +620,8 @@ def save_mapping(body: OntologyMappingCreate):
             "thematic_tags":             body.thematic_tags or [],
             "parent_org":                body.parent_org,
             "parent_org_id":             body.parent_org_id,
+            "parent_orgs":               body.parent_orgs or [],
+            "alias_of_org_id":           body.alias_of_org_id,
         })
         row = row_to_dict(cur, cur.fetchone())
 
@@ -662,6 +774,7 @@ def split_org(org_id: int, req: OrgSplitRequest):
         cur.execute("""
             SELECT canonical_name, meta_type, org_types, sector,
                    location_country, location_city,
+                   un_canonical_tag, un_hierarchical_tags,
                    gov_canonical_tag, gov_hierarchical_tags, gov_country
             FROM prosopography.organizations
             WHERE org_id = %(org_id)s
@@ -672,6 +785,7 @@ def split_org(org_id: int, req: OrgSplitRequest):
             raise HTTPException(status_code=404, detail=f"Org {org_id} not found.")
         (parent_name, meta_type, org_types, sector,
          location_country, location_city,
+         un_canonical_tag, un_hierarchical_tags,
          gov_canonical_tag, gov_hierarchical_tags, gov_country) = row
 
         new_orgs = []
@@ -681,13 +795,15 @@ def split_org(org_id: int, req: OrgSplitRequest):
                 INSERT INTO prosopography.organizations
                     (canonical_name, meta_type, org_types, sector,
                      location_country, location_city,
+                     un_canonical_tag, un_hierarchical_tags,
                      gov_canonical_tag, gov_hierarchical_tags, gov_country,
                      source, review_status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING org_id
             """, [
                 spec.new_canonical_name, meta_type, org_types, sector,
                 location_country, location_city,
+                un_canonical_tag, un_hierarchical_tags,
                 gov_canonical_tag, gov_hierarchical_tags, gov_country,
                 f"split_from_{org_id}", "pending_review",
             ])
@@ -882,7 +998,8 @@ def patch_mapping(mapping_id: int, body: OntologyMappingPatch):
     # Allowed column names — all hardcoded, no injection risk
     _allowed = {
         "equivalence_class", "parent_category", "parent_org", "parent_org_id",
-        "display_label", "region", "thematic_tags", "annotation_notes", "review_status",
+        "parent_orgs", "alias_of_org_id", "display_label", "region", "thematic_tags",
+        "annotation_notes", "review_status",
     }
     set_parts = []
     params: dict = {"mapping_id": mapping_id}
@@ -891,7 +1008,7 @@ def patch_mapping(mapping_id: int, body: OntologyMappingPatch):
         if field not in _allowed:
             continue
         val = getattr(body, field)
-        if field == "thematic_tags":
+        if field in ("thematic_tags", "parent_orgs"):
             set_parts.append(f"{field} = %({field})s::TEXT[]")
             params[field] = val or []
         else:
@@ -944,6 +1061,7 @@ def patch_mapping(mapping_id: int, body: OntologyMappingPatch):
         parent_category=result.get("parent_category"),
         parent_org=result.get("parent_org"),
         parent_org_id=result.get("parent_org_id"),
+        parent_orgs=result.get("parent_orgs") or [],
         region=result.get("region"),
         thematic_tags=result.get("thematic_tags") or [],
         annotation_notes=result.get("annotation_notes"),
