@@ -361,6 +361,27 @@ button { cursor: pointer; border: none; background: none; color: inherit; font: 
 .ftag-dropdown { position: absolute; top: calc(100% + 3px); left: 0; min-width: 160px; z-index: 300; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
 .ftag-dropdown-item { padding: 5px 10px; font-size: 12px; cursor: pointer; color: var(--text); }
 .ftag-dropdown-item:hover, .ftag-dropdown-item.active { background: var(--surface); color: #26de81; }
+
+/* ── Org Summary View ──────────────────────────────────────── */
+.summary-nav-btn {
+  width: 100%; padding: 8px 10px; text-align: left; font-size: 12px;
+  color: var(--muted); border-radius: 4px; transition: background 0.1s, color 0.1s;
+}
+.summary-nav-btn:hover { background: var(--surface); color: var(--text); }
+.summary-nav-btn.active { background: var(--surface); color: var(--accent); font-weight: 600; }
+.summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.summary-table th, .summary-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.summary-table th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+.summary-table tr:hover td { background: var(--surface); }
+.summary-th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.summary-th-sort:hover { color: var(--text); }
+.summary-th-sort.sort-asc::after { content: " ↑"; }
+.summary-th-sort.sort-desc::after { content: " ↓"; }
+.summary-org-row { cursor: pointer; }
+.bar-wrap { display: flex; align-items: center; gap: 8px; }
+.bar { height: 8px; border-radius: 2px; background: var(--border); flex: 1; min-width: 40px; max-width: 120px; }
+.bar-fill { height: 100%; border-radius: 2px; background: var(--accent); }
+.summary-note { font-size: 11px; color: var(--muted); margin-top: 4px; font-style: italic; }
 </style>
 </head>
 <body>
@@ -379,6 +400,7 @@ button { cursor: pointer; border: none; background: none; color: inherit; font: 
       <nav id="view-tabs">
         <button class="view-tab active" data-view="persons">Persons</button>
         <button class="view-tab" data-view="organizations">Organizations</button>
+        <button class="view-tab" data-view="summary">Summary</button>
       </nav>
       <div id="filter-panel"></div>
       <div id="sidebar-list"></div>
@@ -528,6 +550,7 @@ async function apiFetch(url, options = {}) {
 const VIEW_HANDLERS = {
   persons:       loadPersonsView,
   organizations: loadOrgsView,
+  summary:       loadSummaryView,
 };
 
 async function switchView(view) {
@@ -1066,12 +1089,11 @@ async function selectOrg(orgId) {
   STATE.selectedOrgId = orgId;
   document.querySelectorAll('[data-org-id].sidebar-item').forEach(el =>
     el.classList.toggle('active', parseInt(el.dataset.orgId) === orgId));
-  // Switch to orgs view if on persons view
-  if (STATE.view === 'persons') {
+  // Switch to orgs view if not already there
+  if (STATE.view !== 'organizations') {
     STATE.view = 'organizations';
     document.querySelectorAll('.view-tab').forEach(b =>
       b.classList.toggle('active', b.dataset.view === 'organizations'));
-    await loadOrgsSidebar();
     await loadOrgsView();
   }
   document.getElementById('main-content').innerHTML =
@@ -1362,6 +1384,260 @@ async function saveFunctionalTags(container, tags) {
   } catch (err) {
     console.error('Functional tag save failed:', err);
     renderFunctionalTagsWidget(container, tags);
+  }
+}
+
+// ── Org Summary View ─────────────────────────────────────────
+const SUMMARY_CACHE = {};
+const SUMMARY_SORT = {
+  'top-orgs':    { col: 'person_count', dir: 'desc' },
+  'by-type':     { col: 'person_count', dir: 'desc' },
+  'by-ontology': { col: 'person_count', dir: 'desc' },
+  'by-sector':   { col: 'person_count', dir: 'desc' },
+};
+let summarySubView = 'top-orgs';
+let summaryMinPersons = 2;
+
+async function loadSummaryView() {
+  document.getElementById('sidebar-list').innerHTML =
+    '<div style="padding:16px;color:var(--muted);font-size:12px;line-height:1.5">Select an analysis from the panel above.</div>';
+  renderSummaryFilters();
+  await loadSummarySubView(summarySubView);
+}
+
+function renderSummaryFilters() {
+  const panel = document.getElementById('filter-panel');
+  const views = [
+    { id: 'top-orgs',    label: 'Top Organizations' },
+    { id: 'by-type',     label: 'By Type' },
+    { id: 'by-ontology', label: 'By Ontology' },
+    { id: 'by-sector',   label: 'By Sector' },
+  ];
+  panel.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:2px;padding:2px 0 8px">
+      ${views.map(v => `
+        <button class="summary-nav-btn ${summarySubView === v.id ? 'active' : ''}"
+                data-summary-sub="${escHtml(v.id)}">${escHtml(v.label)}</button>
+      `).join('')}
+    </div>
+    <div id="summary-min-wrap" style="${summarySubView === 'top-orgs' ? '' : 'display:none'}">
+      <div class="filter-label">Min. persons</div>
+      <select class="filter-select" id="sf-min-persons">
+        <option value="1">≥ 1 person</option>
+        <option value="2">≥ 2 persons</option>
+        <option value="3">≥ 3 persons</option>
+        <option value="5">≥ 5 persons</option>
+      </select>
+    </div>
+  `;
+  const sel = panel.querySelector('#sf-min-persons');
+  if (sel) {
+    sel.value = String(summaryMinPersons);
+    sel.addEventListener('change', e => {
+      summaryMinPersons = parseInt(e.target.value);
+      delete SUMMARY_CACHE[`top-orgs-${summaryMinPersons > 1 ? summaryMinPersons - 1 : summaryMinPersons}`];
+      delete SUMMARY_CACHE[`top-orgs-${summaryMinPersons}`];
+      loadSummarySubView('top-orgs');
+    });
+  }
+  panel.querySelectorAll('.summary-nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      summarySubView = btn.dataset.summarySub;
+      renderSummaryFilters();
+      loadSummarySubView(summarySubView);
+    });
+  });
+}
+
+async function loadSummarySubView(subView) {
+  const mc = document.getElementById('main-content');
+  mc.innerHTML = '<div class="placeholder"><span>Loading…</span></div>';
+  try {
+    let data;
+    if (subView === 'top-orgs') {
+      const cacheKey = `top-orgs-${summaryMinPersons}`;
+      if (!SUMMARY_CACHE[cacheKey]) {
+        SUMMARY_CACHE[cacheKey] = await apiFetch(
+          `/api/organizations/summary/top-orgs?min_persons=${summaryMinPersons}&limit=200`
+        );
+      }
+      data = SUMMARY_CACHE[cacheKey];
+    } else {
+      if (!SUMMARY_CACHE[subView]) {
+        SUMMARY_CACHE[subView] = await apiFetch(`/api/organizations/summary/${subView}`);
+      }
+      data = SUMMARY_CACHE[subView];
+    }
+    renderSummaryTable(subView, data);
+  } catch (err) {
+    mc.innerHTML = `<div class="placeholder"><span style="color:var(--accent)">Error loading summary data</span></div>`;
+  }
+}
+
+function sortData(items, sort) {
+  const { col, dir } = sort;
+  return [...items].sort((a, b) => {
+    const av = a[col] ?? '';
+    const bv = b[col] ?? '';
+    if (typeof av === 'string') {
+      const cmp = av.localeCompare(bv);
+      return dir === 'asc' ? cmp : -cmp;
+    }
+    return dir === 'asc' ? av - bv : bv - av;
+  });
+}
+
+function thSortClass(col, subView) {
+  const sort = SUMMARY_SORT[subView];
+  if (sort.col !== col) return 'summary-th-sort';
+  return `summary-th-sort ${sort.dir === 'asc' ? 'sort-asc' : 'sort-desc'}`;
+}
+
+function renderSummaryTable(subView, data) {
+  const mc = document.getElementById('main-content');
+  const sort = SUMMARY_SORT[subView];
+  let html = '';
+
+  if (subView === 'top-orgs') {
+    const items = sortData(data.items, sort);
+    html = `
+      <div style="margin-bottom:16px">
+        <div class="section-title">Top Organizations by Corpus Coverage</div>
+        <div style="font-size:12px;color:var(--muted)">${data.total} organizations with ≥${summaryMinPersons} corpus member${summaryMinPersons !== 1 ? 's' : ''}</div>
+      </div>
+      <table class="summary-table" id="summary-tbl">
+        <thead><tr>
+          <th class="${thSortClass('canonical_name', subView)}" data-sort-col="canonical_name">Organization</th>
+          <th class="${thSortClass('meta_type', subView)}" data-sort-col="meta_type">Type</th>
+          <th class="${thSortClass('sector', subView)}" data-sort-col="sector">Sector</th>
+          <th class="${thSortClass('person_count', subView)}" data-sort-col="person_count" style="text-align:right">Persons</th>
+          <th class="${thSortClass('position_count', subView)}" data-sort-col="position_count" style="text-align:right">Positions</th>
+          <th>HLP Panels</th>
+        </tr></thead>
+        <tbody>
+          ${items.map(r => `
+            <tr class="summary-org-row" data-org-id="${r.org_id}" title="Click to view organization detail">
+              <td>${escHtml(r.canonical_name)}</td>
+              <td>${metaBadge(r.meta_type)}</td>
+              <td style="color:var(--muted);font-size:12px">${escHtml(r.sector || '—')}</td>
+              <td style="text-align:right;font-weight:600;color:var(--accent)">${r.person_count}</td>
+              <td style="text-align:right;color:var(--muted)">${r.position_count}</td>
+              <td>${(r.hlp_panels || []).map(id => `<span class="hlp-badge hlp-${id}" style="margin-right:2px">P${id}</span>`).join('')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+  } else if (subView === 'by-type') {
+    const items = sortData(data.items, sort);
+    const maxP = Math.max(...items.map(r => r.person_count), 1);
+    html = `
+      <div style="margin-bottom:16px">
+        <div class="section-title">Organization Types — Corpus Coverage</div>
+      </div>
+      <table class="summary-table" id="summary-tbl">
+        <thead><tr>
+          <th class="${thSortClass('meta_type', subView)}" data-sort-col="meta_type">Type</th>
+          <th class="${thSortClass('org_count', subView)}" data-sort-col="org_count" style="text-align:right">Organizations</th>
+          <th class="${thSortClass('person_count', subView)}" data-sort-col="person_count">Persons</th>
+          <th class="${thSortClass('position_count', subView)}" data-sort-col="position_count" style="text-align:right">Positions</th>
+        </tr></thead>
+        <tbody>
+          ${items.map(r => `
+            <tr>
+              <td>${metaBadge(r.meta_type)}</td>
+              <td style="text-align:right;color:var(--muted)">${r.org_count}</td>
+              <td>
+                <div class="bar-wrap">
+                  <span style="font-weight:600;color:var(--accent);min-width:24px">${r.person_count}</span>
+                  <div class="bar"><div class="bar-fill" style="width:${Math.round(r.person_count / maxP * 100)}%"></div></div>
+                </div>
+              </td>
+              <td style="text-align:right;color:var(--muted)">${r.position_count}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+  } else if (subView === 'by-ontology') {
+    const items = sortData(data.items, sort);
+    html = `
+      <div style="margin-bottom:16px">
+        <div class="section-title">Ontology Classes — Corpus Coverage</div>
+        <div class="summary-note">${escHtml(data.note)}</div>
+      </div>
+      <table class="summary-table" id="summary-tbl">
+        <thead><tr>
+          <th class="${thSortClass('equivalence_class', subView)}" data-sort-col="equivalence_class">Equivalence Class</th>
+          <th class="${thSortClass('ontology_category', subView)}" data-sort-col="ontology_category">Category</th>
+          <th class="${thSortClass('person_count', subView)}" data-sort-col="person_count" style="text-align:right">Persons</th>
+          <th class="${thSortClass('org_count', subView)}" data-sort-col="org_count" style="text-align:right">Orgs</th>
+          <th class="${thSortClass('position_count', subView)}" data-sort-col="position_count" style="text-align:right">Positions</th>
+          <th>Hierarchy Path</th>
+        </tr></thead>
+        <tbody>
+          ${items.map(r => `
+            <tr>
+              <td style="font-family:monospace;font-size:12px;color:#a29bfe">${escHtml(r.equivalence_class)}</td>
+              <td><span class="badge" style="background:var(--surface);color:var(--muted)">${escHtml(r.ontology_category || '')}</span></td>
+              <td style="text-align:right;font-weight:600;color:var(--accent)">${r.person_count}</td>
+              <td style="text-align:right;color:var(--muted)">${r.org_count}</td>
+              <td style="text-align:right;color:var(--muted)">${r.position_count}</td>
+              <td style="font-size:11px;color:var(--muted)">${(r.hierarchy_path || []).join(' › ')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+  } else if (subView === 'by-sector') {
+    const items = sortData(data.items, sort);
+    const maxP = Math.max(...items.map(r => r.person_count), 1);
+    html = `
+      <div style="margin-bottom:16px">
+        <div class="section-title">Sectors — Corpus Coverage</div>
+      </div>
+      <table class="summary-table" id="summary-tbl">
+        <thead><tr>
+          <th class="${thSortClass('sector', subView)}" data-sort-col="sector">Sector</th>
+          <th class="${thSortClass('org_count', subView)}" data-sort-col="org_count" style="text-align:right">Organizations</th>
+          <th class="${thSortClass('person_count', subView)}" data-sort-col="person_count">Persons</th>
+          <th class="${thSortClass('position_count', subView)}" data-sort-col="position_count" style="text-align:right">Positions</th>
+        </tr></thead>
+        <tbody>
+          ${items.map(r => `
+            <tr>
+              <td>${escHtml(r.sector)}</td>
+              <td style="text-align:right;color:var(--muted)">${r.org_count}</td>
+              <td>
+                <div class="bar-wrap">
+                  <span style="font-weight:600;color:var(--accent);min-width:24px">${r.person_count}</span>
+                  <div class="bar"><div class="bar-fill" style="width:${Math.round(r.person_count / maxP * 100)}%"></div></div>
+                </div>
+              </td>
+              <td style="text-align:right;color:var(--muted)">${r.position_count}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  mc.innerHTML = html;
+
+  // Wire up sort clicks
+  const tbl = document.getElementById('summary-tbl');
+  if (!tbl) return;
+  tbl.querySelectorAll('th[data-sort-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sortCol;
+      const s = SUMMARY_SORT[subView];
+      s.dir = s.col === col ? (s.dir === 'asc' ? 'desc' : 'asc') : 'desc';
+      s.col = col;
+      const cacheKey = subView === 'top-orgs' ? `top-orgs-${summaryMinPersons}` : subView;
+      renderSummaryTable(subView, SUMMARY_CACHE[cacheKey]);
+    });
+  });
+
+  // Click-to-navigate for Top Orgs rows
+  if (subView === 'top-orgs') {
+    tbl.querySelectorAll('.summary-org-row').forEach(row => {
+      row.addEventListener('click', () => selectOrg(parseInt(row.dataset.orgId)));
+    });
   }
 }
 

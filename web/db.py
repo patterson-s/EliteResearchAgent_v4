@@ -9,16 +9,23 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
 
 @contextmanager
 def get_conn():
-    conn = psycopg2.connect(
-        host=os.environ["DB_HOST"],
-        port=int(os.environ.get("DB_PORT", 5432)),
-        dbname=os.environ["DB_NAME"],
-        user=os.environ["DB_USER"],
-        password=os.environ["DB_PASSWORD"],
-    )
+    if DATABASE_URL:
+        # Render provides postgres:// scheme; psycopg2 requires postgresql://
+        dsn = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        conn = psycopg2.connect(dsn)
+    else:
+        conn = psycopg2.connect(
+            host=os.environ["DB_HOST"],
+            port=int(os.environ.get("DB_PORT", 5432)),
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+            password=os.environ["DB_PASSWORD"],
+        )
     try:
         yield conn
     finally:

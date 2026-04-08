@@ -212,6 +212,60 @@ class OrgDetail(BaseModel):
     corpus_members: list[OrgCorpusMember] = []
 
 
+# ── Org Summary ───────────────────────────────────────────────
+
+class TopOrgRow(BaseModel):
+    org_id: int
+    canonical_name: str
+    meta_type: Optional[str] = None
+    sector: Optional[str] = None
+    person_count: int
+    position_count: int
+    hlp_panels: list[int] = []
+
+
+class TopOrgsResponse(BaseModel):
+    items: list[TopOrgRow]
+    total: int
+
+
+class TypeRow(BaseModel):
+    meta_type: str
+    person_count: int
+    org_count: int
+    position_count: int
+
+
+class TypeSummaryResponse(BaseModel):
+    items: list[TypeRow]
+
+
+class OntologyRow(BaseModel):
+    equivalence_class: str
+    hierarchy_path: list[str] = []
+    parent_category: Optional[str] = None
+    ontology_category: Optional[str] = None
+    person_count: int
+    org_count: int
+    position_count: int
+
+
+class OntologySummaryResponse(BaseModel):
+    items: list[OntologyRow]
+    note: str
+
+
+class SectorRow(BaseModel):
+    sector: str
+    person_count: int
+    org_count: int
+    position_count: int
+
+
+class SectorSummaryResponse(BaseModel):
+    items: list[SectorRow]
+
+
 # ── Ontology ──────────────────────────────────────────────────────────────────
 
 class OntologyRun(BaseModel):

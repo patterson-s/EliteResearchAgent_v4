@@ -4,6 +4,10 @@ from web.db import get_conn, rows_to_dicts, row_to_dict
 from web.models import (
     OrgListResponse, OrgListItem, OrgFilterMeta,
     OrgDetail, OrgCorpusMember, OrgCorpusMemberRole, OrgTooltip,
+    TopOrgRow, TopOrgsResponse,
+    TypeRow, TypeSummaryResponse,
+    OntologyRow, OntologySummaryResponse,
+    SectorRow, SectorSummaryResponse,
 )
 
 router = APIRouter()
@@ -67,6 +71,117 @@ def list_organizations(
         cur.close()
     items = [OrgListItem(**r) for r in rows]
     return OrgListResponse(total=total, items=items)
+
+
+@router.get("/summary/top-orgs", response_model=TopOrgsResponse)
+def summary_top_orgs(
+    min_persons: int = Query(2, ge=1),
+    limit: int = Query(200, le=500),
+):
+    sql = """
+        SELECT
+            o.org_id,
+            o.canonical_name,
+            o.meta_type,
+            o.sector,
+            COUNT(DISTINCT cp.person_id)                             AS person_count,
+            COUNT(cp.position_id)                                    AS position_count,
+            ARRAY_AGG(DISTINCT p.hlp_id ORDER BY p.hlp_id)          AS hlp_panels
+        FROM prosopography.organizations o
+        JOIN prosopography.career_positions cp ON cp.org_id = o.org_id
+        JOIN prosopography.persons p ON p.person_id = cp.person_id
+        GROUP BY o.org_id, o.canonical_name, o.meta_type, o.sector
+        HAVING COUNT(DISTINCT cp.person_id) >= %(min_persons)s
+        ORDER BY person_count DESC, position_count DESC
+        LIMIT %(limit)s
+    """
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(sql, {"min_persons": min_persons, "limit": limit})
+        rows = rows_to_dicts(cur)
+        cur.close()
+    items = [TopOrgRow(**r) for r in rows]
+    return TopOrgsResponse(items=items, total=len(items))
+
+
+@router.get("/summary/by-type", response_model=TypeSummaryResponse)
+def summary_by_type():
+    sql = """
+        SELECT
+            COALESCE(o.meta_type, 'unknown')    AS meta_type,
+            COUNT(DISTINCT cp.person_id)         AS person_count,
+            COUNT(DISTINCT o.org_id)             AS org_count,
+            COUNT(cp.position_id)                AS position_count
+        FROM prosopography.organizations o
+        JOIN prosopography.career_positions cp ON cp.org_id = o.org_id
+        GROUP BY o.meta_type
+        ORDER BY person_count DESC
+    """
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = rows_to_dicts(cur)
+        cur.close()
+    return TypeSummaryResponse(items=[TypeRow(**r) for r in rows])
+
+
+@router.get("/summary/by-ontology", response_model=OntologySummaryResponse)
+def summary_by_ontology():
+    sql = """
+        SELECT
+            m.equivalence_class,
+            m.hierarchy_path,
+            m.parent_category,
+            r.scope_json->>'category'            AS ontology_category,
+            COUNT(DISTINCT cp.person_id)         AS person_count,
+            COUNT(DISTINCT o.org_id)             AS org_count,
+            COUNT(cp.position_id)                AS position_count
+        FROM prosopography.org_ontology_mappings m
+        JOIN prosopography.derivative_runs r   ON r.run_id  = m.run_id
+        JOIN prosopography.organizations o     ON o.org_id  = m.org_id
+        JOIN prosopography.career_positions cp ON cp.org_id = m.org_id
+        WHERE m.equivalence_class NOT LIKE 'not\\_%%'
+          AND m.equivalence_class NOT IN ('needs_review', 'presidential_campaign')
+        GROUP BY m.equivalence_class, m.hierarchy_path, m.parent_category,
+                 r.scope_json->>'category'
+        ORDER BY person_count DESC
+    """
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = rows_to_dicts(cur)
+        # Count distinct annotated orgs for the note
+        cur.execute("""
+            SELECT COUNT(DISTINCT org_id) FROM prosopography.org_ontology_mappings
+            WHERE equivalence_class NOT LIKE 'not\\_%'
+              AND equivalence_class NOT IN ('needs_review', 'presidential_campaign')
+        """)
+        annotated_count = cur.fetchone()[0]
+        cur.close()
+    items = [OntologyRow(**r) for r in rows]
+    note = f"Based on {annotated_count} annotated organizations (partial coverage of full corpus)"
+    return OntologySummaryResponse(items=items, note=note)
+
+
+@router.get("/summary/by-sector", response_model=SectorSummaryResponse)
+def summary_by_sector():
+    sql = """
+        SELECT
+            COALESCE(o.sector, 'Unknown')        AS sector,
+            COUNT(DISTINCT cp.person_id)         AS person_count,
+            COUNT(DISTINCT o.org_id)             AS org_count,
+            COUNT(cp.position_id)                AS position_count
+        FROM prosopography.organizations o
+        JOIN prosopography.career_positions cp ON cp.org_id = o.org_id
+        GROUP BY o.sector
+        ORDER BY person_count DESC
+    """
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = rows_to_dicts(cur)
+        cur.close()
+    return SectorSummaryResponse(items=[SectorRow(**r) for r in rows])
 
 
 @router.get("/{org_id}/tooltip", response_model=OrgTooltip)
