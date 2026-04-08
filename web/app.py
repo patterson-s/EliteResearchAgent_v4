@@ -5,9 +5,6 @@ import secrets
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
-
 from web.routers import persons, organizations, search, hlp, ontology, tags
 
 SITE_USERNAME = os.environ.get("SITE_USERNAME", "admin")
@@ -16,20 +13,45 @@ SITE_PASSWORD = os.environ.get("SITE_PASSWORD", "")
 print(f"[auth] SITE_PASSWORD set: {bool(SITE_PASSWORD)}", flush=True)
 
 
-class BasicAuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        if not SITE_PASSWORD:
-            return await call_next(request)
-        auth = request.headers.get("Authorization", "")
-        if self._valid(auth):
-            return await call_next(request)
-        return Response(
-            "Unauthorized",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="Prosopography Explorer"'},
-        )
+class BasicAuthMiddleware:
+    """Pure ASGI middleware — works regardless of Starlette version."""
 
-    def _valid(self, auth: str) -> bool:
+    def __init__(self, app, **kwargs):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+
+        if not SITE_PASSWORD:
+            await self.app(scope, receive, send)
+            return
+
+        headers = {k.lower(): v for k, v in scope.get("headers", [])}
+        auth = headers.get(b"authorization", b"").decode("latin-1")
+
+        if self._valid(auth):
+            await self.app(scope, receive, send)
+            return
+
+        await send({
+            "type": "http.response.start",
+            "status": 401,
+            "headers": [
+                [b"content-type", b"text/plain; charset=utf-8"],
+                [b"www-authenticate", b'Basic realm="Prosopography Explorer"'],
+                [b"content-length", b"12"],
+            ],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": b"Unauthorized",
+            "more_body": False,
+        })
+
+    @staticmethod
+    def _valid(auth: str) -> bool:
         try:
             scheme, creds = auth.split(" ", 1)
             if scheme.lower() != "basic":
