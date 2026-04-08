@@ -13,6 +13,8 @@ from web.routers import persons, organizations, search, hlp, ontology, tags
 SITE_USERNAME = os.environ.get("SITE_USERNAME", "admin")
 SITE_PASSWORD = os.environ.get("SITE_PASSWORD", "")
 
+print(f"[auth] SITE_PASSWORD set: {bool(SITE_PASSWORD)}", flush=True)
+
 
 class BasicAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -57,6 +59,11 @@ app.include_router(tags.router,          prefix="/api/tags",           tags=["Ta
 
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+
+
+@app.get("/health", include_in_schema=False)
+def health():
+    return {"auth_enabled": bool(SITE_PASSWORD)}
 
 
 @app.get("/", include_in_schema=False)
