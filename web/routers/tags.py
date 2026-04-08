@@ -31,11 +31,18 @@ def _resolve_run_id(run_name: str) -> int:
     return row[0]
 
 
-# Resolved once at import time (after migration has run)
-PERSON_RUN_ID: int = _resolve_run_id("user_ftags_person_v1")
-POSITION_RUN_ID: int = _resolve_run_id("user_ftags_position_v1")
+_RUN_NAME_MAP = {
+    "person":   "user_ftags_person_v1",
+    "position": "user_ftags_position_v1",
+}
+_RUN_ID_CACHE: dict[str, int] = {}
 
-_RUN_ID_MAP = {"person": PERSON_RUN_ID, "position": POSITION_RUN_ID}
+
+def _get_run_id(entity_type: str) -> int:
+    """Resolve run_id lazily on first use (avoids DB call at import time)."""
+    if entity_type not in _RUN_ID_CACHE:
+        _RUN_ID_CACHE[entity_type] = _resolve_run_id(_RUN_NAME_MAP[entity_type])
+    return _RUN_ID_CACHE[entity_type]
 
 
 # ── Vocab ──────────────────────────────────────────────────────────────────────
@@ -127,7 +134,7 @@ def put_position_tags(position_id: int, body: FunctionalTagsUpsertRequest):
 # ── Shared upsert logic ────────────────────────────────────────────────────────
 
 def _upsert_tags(entity_type: str, entity_id: int, new_tags: list[str]) -> FunctionalTagsItem:
-    run_id = _RUN_ID_MAP[entity_type]
+    run_id = _get_run_id(entity_type)
     # Normalise: lowercase, strip whitespace, deduplicate preserving order
     cleaned: list[str] = []
     seen: set[str] = set()
