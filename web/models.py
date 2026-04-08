@@ -37,6 +37,7 @@ class PersonAttributeItem(BaseModel):
     attribute_value: str
     attribute_label: Optional[str] = None
     confidence: Optional[str] = None
+    extra_data: Optional[dict] = None
 
 
 class PersonFilterMeta(BaseModel):
@@ -45,6 +46,7 @@ class PersonFilterMeta(BaseModel):
     birth_decades: list[int]
     career_domains: list[str] = []
     career_typologies: list[str] = []
+    functional_mobility_types: list[str] = []
 
 
 class PositionTagItem(BaseModel):
@@ -72,6 +74,7 @@ class CareerPositionItem(BaseModel):
     event_source: Optional[str] = None
     sort_order: int = 0
     tags: Optional[PositionTagItem] = None
+    functional_tags: list[str] = []
 
 
 class EducationItem(BaseModel):
@@ -113,6 +116,12 @@ class PersonDetail(BaseModel):
     career_positions: list[CareerPositionItem] = []
     education: list[EducationItem] = []
     awards: list[AwardItem] = []
+    functional_tags: list[str] = []
+    notes: Optional[str] = None
+
+
+class PersonNotesRequest(BaseModel):
+    note_text: str
 
 
 # ── Organizations ─────────────────────────────────────────────────────────────
@@ -152,6 +161,23 @@ class OrgTooltip(BaseModel):
     ontology_equivalence_class: Optional[str] = None
     ontology_hierarchy_path: Optional[list[str]] = None
     ontology_thematic_tags: Optional[list[str]] = None
+
+
+# ── Functional Tags ────────────────────────────────────────────────────────────
+
+class FunctionalTagsItem(BaseModel):
+    entity_type: str
+    entity_id: int
+    tags: list[str] = []
+
+
+class FunctionalTagsUpsertRequest(BaseModel):
+    tags: list[str]
+
+
+class FunctionalTagVocabItem(BaseModel):
+    tag_name: str
+    use_count: int
 
 
 class OrgCorpusMemberRole(BaseModel):

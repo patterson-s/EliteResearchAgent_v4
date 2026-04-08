@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from web.routers import persons, organizations, search, hlp, ontology
+from web.routers import persons, organizations, search, hlp, ontology, tags
 
 app = FastAPI(
     title="Prosopography Explorer",
@@ -16,6 +16,7 @@ app.include_router(persons.router,       prefix="/api/persons",       tags=["Per
 app.include_router(organizations.router, prefix="/api/organizations", tags=["Organizations"])
 app.include_router(search.router,        prefix="/api/search",        tags=["Search"])
 app.include_router(ontology.router,      prefix="/api/ontology",      tags=["Ontology"])
+app.include_router(tags.router,          prefix="/api/tags",           tags=["Tags"])
 
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=_static_dir), name="static")

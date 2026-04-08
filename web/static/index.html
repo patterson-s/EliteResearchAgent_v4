@@ -221,9 +221,55 @@ button { cursor: pointer; border: none; background: none; color: inherit; font: 
 .attr-chip-value { font-weight: 600; }
 .attr-chip-domain    { background: #0d2a20; color: #26de81; }
 .attr-chip-typology  { background: #1e1030; color: #a55eea; }
-.attr-chip-mobility  { background: #2a200d; color: #f7b731; }
+.attr-chip-mobility  { background: #1a1a2e; color: #4fc3f7; }
+.attr-chip[data-tooltip] { position: relative; cursor: default; }
+.attr-chip[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e1e2e;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
+  width: 260px;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
 .attr-chip-prestige  { background: #0d1e2a; color: #45aaf2; }
 .attr-chip-geo       { background: #1a1a2e; color: #8899aa; }
+
+/* ── Notes Tab ─────────────────────────────────────────────── */
+.notes-panel { display: flex; flex-direction: column; gap: 10px; }
+.notes-textarea {
+  width: 100%; min-height: 220px; resize: vertical;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 12px; font-size: 13px; line-height: 1.6;
+  font-family: inherit; box-sizing: border-box;
+}
+.notes-textarea:focus { outline: none; border-color: var(--accent); }
+.notes-status { font-size: 12px; color: var(--muted); min-height: 16px; text-align: right; }
+.notes-status.saved   { color: #26de81; }
+.notes-status.unsaved { color: #f7b731; }
+
+/* ── Functional Mobility Tab ───────────────────────────────── */
+.fm-panel { display: flex; flex-direction: column; gap: 18px; }
+.fm-header { display: flex; align-items: center; gap: 12px; }
+.fm-type-badge { font-size: 15px; font-weight: 600; border: 1px solid; border-radius: 6px; padding: 4px 12px; }
+.fm-confidence { font-size: 12px; color: var(--muted); }
+.fm-section { display: flex; flex-direction: column; gap: 6px; }
+.fm-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 500; }
+.fm-narrative { font-size: 13px; line-height: 1.6; color: var(--text); }
+.fm-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fm-tag { font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; color: var(--text); }
+.fm-transition { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 
 /* ── Education & Awards ────────────────────────────────────── */
 .edu-item, .award-item {
@@ -301,6 +347,20 @@ button { cursor: pointer; border: none; background: none; color: inherit; font: 
 .stat-chips { display: flex; gap: 10px; flex-wrap: wrap; }
 .stat-chip { background: var(--surface); border-radius: 4px; padding: 3px 10px; font-size: 12px; color: var(--muted); }
 .stat-chip strong { color: var(--text); }
+
+/* ── Functional Tag Widget ─────────────────────────────────────── */
+.functional-tags-widget { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; }
+.ftag-chip { display: inline-flex; align-items: center; gap: 3px; background: #1a2a20; border: 1px solid #26de8155; border-radius: 4px; padding: 2px 7px; font-size: 11px; color: #26de81; }
+.ftag-chip-remove { font-size: 12px; color: #26de8199; cursor: pointer; padding: 0 1px; border: none; background: none; font-family: inherit; line-height: 1; }
+.ftag-chip-remove:hover { color: var(--accent); }
+.ftag-add-btn { font-size: 11px; color: var(--muted); padding: 2px 7px; border: 1px dashed var(--border); border-radius: 4px; cursor: pointer; background: none; font-family: inherit; }
+.ftag-add-btn:hover { color: var(--text); border-color: var(--muted); }
+.ftag-input-wrap { position: relative; display: inline-block; }
+.ftag-input { background: var(--surface); border: 1px solid #26de8155; border-radius: 4px; padding: 2px 8px; font-size: 11px; color: var(--text); outline: none; width: 140px; font-family: inherit; }
+.ftag-input:focus { border-color: #26de81; }
+.ftag-dropdown { position: absolute; top: calc(100% + 3px); left: 0; min-width: 160px; z-index: 300; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
+.ftag-dropdown-item { padding: 5px 10px; font-size: 12px; cursor: pointer; color: var(--text); }
+.ftag-dropdown-item:hover, .ftag-dropdown-item.active { background: var(--surface); color: #26de81; }
 </style>
 </head>
 <body>
@@ -438,9 +498,9 @@ function domainTag(domain) {
 function renderAttributeChips(attributes) {
   if (!attributes || !attributes.length) return '';
   const ATTR_CONFIG = {
-    career_domain:      { cls: 'attr-chip-domain',   label: 'Domain',     fmt: v => v.replace(/_/g, ' ') },
-    career_typology:    { cls: 'attr-chip-typology',  label: 'Type',       fmt: v => v.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) },
-    mobility_pattern:   { cls: 'attr-chip-mobility',  label: 'Mobility',   fmt: v => v.replace(/_/g, ' ') },
+    career_domain:        { cls: 'attr-chip-domain',    label: 'Domain',     fmt: v => v.replace(/_/g, ' ') },
+    career_typology:      { cls: 'attr-chip-typology',  label: 'Type',       fmt: v => v.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) },
+    functional_summary:   { cls: 'attr-chip-mobility',  label: 'Functional Mobility',   fmt: v => v.charAt(0).toUpperCase() + v.slice(1) },
     institution_prestige:{ cls: 'attr-chip-prestige', label: 'Prestige',   fmt: v => v.replace(/_/g, ' ') },
     geo_edu_category:   { cls: 'attr-chip-geo',       label: 'Edu region', fmt: v => v.replace(/_/g, ' ') },
   };
@@ -448,15 +508,18 @@ function renderAttributeChips(attributes) {
     .filter(a => ATTR_CONFIG[a.attribute_name] && a.attribute_name !== 'is_hybrid_domain')
     .map(a => {
       const cfg = ATTR_CONFIG[a.attribute_name];
-      return `<span class="attr-chip ${cfg.cls}">
+      const tooltip = a.extra_data && a.extra_data.calibration_note
+        ? ` data-tooltip="${escHtml(a.extra_data.calibration_note)}"`
+        : '';
+      return `<span class="attr-chip ${cfg.cls}"${tooltip}>
         <span class="attr-chip-label">${cfg.label}</span>
         <span class="attr-chip-value">${escHtml(cfg.fmt(a.attribute_value))}</span>
       </span>`;
     }).join('');
 }
 
-async function apiFetch(url) {
-  const res = await fetch(url);
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, options);
   if (!res.ok) throw new Error(`API error ${res.status}: ${url}`);
   return res.json();
 }
@@ -516,6 +579,15 @@ function renderPersonFilters(meta) {
   const typologyOptions = (meta.career_typologies || []).map(t =>
     `<option value="${t}">${typologyLabels[t] || t}</option>`
   ).join('');
+  const mobilityLabels = {
+    monofunctional:  'Monofunctional',
+    bifunctional:    'Bifunctional',
+    multifunctional: 'Multifunctional',
+    transitional:    'Transitional',
+  };
+  const mobilityOptions = (meta.functional_mobility_types || []).map(m =>
+    `<option value="${m}">${mobilityLabels[m] || m}</option>`
+  ).join('');
 
   panel.innerHTML = `
     <div class="filter-group">
@@ -544,6 +616,12 @@ function renderPersonFilters(meta) {
       </select>
     </div>
     <div class="filter-group">
+      <div class="filter-label">Functional Mobility</div>
+      <select class="filter-select" id="pf-mobility">
+        <option value="">All mobility types</option>${mobilityOptions}
+      </select>
+    </div>
+    <div class="filter-group">
       <div class="filter-label">Nationality</div>
       <select class="filter-select" id="pf-nat">
         <option value="">All nationalities</option>${natOptions}
@@ -561,6 +639,7 @@ function renderPersonFilters(meta) {
   if (STATE.filters.hlp_id)        document.getElementById('pf-hlp').value = STATE.filters.hlp_id;
   if (STATE.filters.career_domain) document.getElementById('pf-domain').value = STATE.filters.career_domain;
   if (STATE.filters.career_typology) document.getElementById('pf-typology').value = STATE.filters.career_typology;
+  if (STATE.filters.functional_summary) document.getElementById('pf-mobility').value = STATE.filters.functional_summary;
   if (STATE.filters.nationality)   document.getElementById('pf-nat').value = STATE.filters.nationality;
   if (STATE.filters.birth_decade) document.getElementById('pf-decade').value = STATE.filters.birth_decade;
 
@@ -585,6 +664,10 @@ function renderPersonFilters(meta) {
     STATE.filters.career_typology = e.target.value || undefined;
     loadPersonsSidebar();
   });
+  document.getElementById('pf-mobility').addEventListener('change', e => {
+    STATE.filters.functional_summary = e.target.value || undefined;
+    loadPersonsSidebar();
+  });
   document.getElementById('pf-nat').addEventListener('change', e => {
     STATE.filters.nationality = e.target.value || undefined;
     loadPersonsSidebar();
@@ -601,6 +684,7 @@ async function loadPersonsSidebar() {
   if (STATE.filters.hlp_id)       params.set('hlp_id', STATE.filters.hlp_id);
   if (STATE.filters.career_domain)   params.set('career_domain', STATE.filters.career_domain);
   if (STATE.filters.career_typology) params.set('career_typology', STATE.filters.career_typology);
+  if (STATE.filters.functional_summary) params.set('functional_summary', STATE.filters.functional_summary);
   if (STATE.filters.nationality)     params.set('nationality', STATE.filters.nationality);
   if (STATE.filters.birth_decade) params.set('birth_decade', STATE.filters.birth_decade);
   params.set('limit', '100');
@@ -646,9 +730,10 @@ function renderPersonProfile(d) {
     ? (d.death_year ? `${d.birth_year}–${d.death_year}` : `b. ${d.birth_year}`)
     : '';
 
-  const careerHTML = renderCareerTab(d.career_positions, d.death_status);
-  const eduHTML    = renderEducationTab(d.education);
-  const awardsHTML = renderAwardsTab(d.awards);
+  const careerHTML   = renderCareerTab(d.career_positions, d.death_status);
+  const eduHTML      = renderEducationTab(d.education);
+  const awardsHTML   = renderAwardsTab(d.awards);
+  const mobilityHTML = renderFunctionalMobilityTab(d.attributes);
 
   document.getElementById('main-content').innerHTML = `
     <div class="profile-header">
@@ -664,6 +749,7 @@ function renderPersonProfile(d) {
         ${d.hlp_year ? `<span class="profile-meta-item"><strong>HLP year:</strong> ${d.hlp_year}</span>` : ''}
       </div>
       ${(d.attributes && d.attributes.length) ? `<div class="attr-chips">${renderAttributeChips(d.attributes)}</div>` : ''}
+      <div class="functional-tags-widget" data-entity-type="person" data-entity-id="${d.person_id}" id="ftw-person-${d.person_id}"></div>
       <div class="stat-chips" style="margin-top:10px">
         <span class="stat-chip"><strong>${d.career_positions.length}</strong> positions</span>
         <span class="stat-chip"><strong>${d.education.length}</strong> education</span>
@@ -675,12 +761,56 @@ function renderPersonProfile(d) {
       <button class="profile-tab active" data-tab="career">Career (${d.career_positions.length})</button>
       <button class="profile-tab" data-tab="education">Education (${d.education.length})</button>
       <button class="profile-tab" data-tab="awards">Awards (${d.awards.length})</button>
+      <button class="profile-tab" data-tab="mobility">Functional Mobility</button>
+      <button class="profile-tab" data-tab="notes">Notes</button>
     </div>
 
     <div class="tab-panel active" id="tab-career">${careerHTML}</div>
     <div class="tab-panel" id="tab-education">${eduHTML}</div>
     <div class="tab-panel" id="tab-awards">${awardsHTML}</div>
+    <div class="tab-panel" id="tab-mobility">${mobilityHTML}</div>
+    <div class="tab-panel" id="tab-notes">
+      <div class="notes-panel">
+        <textarea class="notes-textarea" id="person-notes-input" placeholder="Add notes about this person…">${escHtml(d.notes || '')}</textarea>
+        <div class="notes-status" id="person-notes-status"></div>
+      </div>
+    </div>
   `;
+
+  // Notes auto-save
+  const notesInput  = document.getElementById('person-notes-input');
+  const notesStatus = document.getElementById('person-notes-status');
+  let notesSaveTimer = null;
+  notesInput.addEventListener('input', () => {
+    notesStatus.textContent = 'Unsaved changes';
+    notesStatus.className = 'notes-status unsaved';
+    clearTimeout(notesSaveTimer);
+    notesSaveTimer = setTimeout(async () => {
+      try {
+        await apiFetch(`/api/persons/${d.person_id}/notes`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note_text: notesInput.value }),
+        });
+        notesStatus.textContent = 'Saved';
+        notesStatus.className = 'notes-status saved';
+        setTimeout(() => { notesStatus.textContent = ''; notesStatus.className = 'notes-status'; }, 2000);
+      } catch (err) {
+        notesStatus.textContent = 'Save failed';
+        notesStatus.className = 'notes-status unsaved';
+      }
+    }, 800);
+  });
+
+  // Initialise functional tag widgets (must run after innerHTML is set)
+  renderFunctionalTagsWidget(
+    document.getElementById(`ftw-person-${d.person_id}`),
+    d.functional_tags || []
+  );
+  (d.career_positions || []).forEach(pos => {
+    const el = document.getElementById(`ftw-pos-${pos.position_id}`);
+    if (el) renderFunctionalTagsWidget(el, pos.functional_tags || []);
+  });
 }
 
 function renderCareerTab(positions, deathStatus) {
@@ -701,9 +831,92 @@ function renderCareerTab(positions, deathStatus) {
             ${sourceBadge(pos.event_source)}
             ${confidenceBadge(pos.confidence)}
           </div>
+          <div class="functional-tags-widget" data-entity-type="position" data-entity-id="${pos.position_id}" id="ftw-pos-${pos.position_id}"></div>
         </div>
       </div>`;
   }).join('') + '</div>';
+}
+
+function renderFunctionalMobilityTab(attributes) {
+  const summary  = (attributes || []).find(a => a.attribute_name === 'functional_summary');
+  const profile  = (attributes || []).find(a => a.attribute_name === 'functional_profile');
+
+  if (!summary) return '<p style="color:var(--muted)">No functional mobility data available.</p>';
+
+  const mobilityLabels = {
+    monofunctional:  'Monofunctional',
+    bifunctional:    'Bifunctional',
+    multifunctional: 'Multifunctional',
+    transitional:    'Transitional',
+  };
+  const mobilityColors = {
+    monofunctional:  '#4fc3f7',
+    bifunctional:    '#26de81',
+    multifunctional: '#a55eea',
+    transitional:    '#f7b731',
+  };
+  const mt = summary.attribute_value;
+  const color = mobilityColors[mt] || 'var(--accent)';
+  const label = mobilityLabels[mt] || mt;
+  const calibration = summary.extra_data && summary.extra_data.calibration_note || '';
+  const confidence  = summary.confidence || '';
+
+  const pd = profile && profile.extra_data || {};
+  const functions      = pd.primary_functions || [];
+  const domainArc      = pd.domain_trajectory || [];
+  const arc            = pd.functional_arc || '';
+  const transitions    = pd.key_transitions || [];
+
+  const transitionsHTML = transitions.length ? `
+    <div class="fm-section">
+      <div class="fm-section-label">Key Transitions</div>
+      ${transitions.map(t => {
+        const yr = t.approximate_year ? ` <span style="color:var(--muted)">(~${t.approximate_year})</span>` : '';
+        const note = t.note ? ` — ${escHtml(t.note)}` : '';
+        return `<div class="fm-transition">
+          <span class="fm-tag">${escHtml(t.from || '?')}</span>
+          <span style="color:var(--muted)">→</span>
+          <span class="fm-tag">${escHtml(t.to || '?')}</span>
+          ${yr}${escHtml(note)}
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  return `
+    <div class="fm-panel">
+      <div class="fm-header">
+        <span class="fm-type-badge" style="color:${color};border-color:${color}">${label}</span>
+        ${confidence ? `<span class="fm-confidence">confidence: ${confidence}</span>` : ''}
+      </div>
+
+      ${calibration ? `
+      <div class="fm-section">
+        <div class="fm-section-label">Comparative Assessment</div>
+        <div class="fm-narrative">${escHtml(calibration)}</div>
+      </div>` : ''}
+
+      ${arc ? `
+      <div class="fm-section">
+        <div class="fm-section-label">Functional Arc</div>
+        <div class="fm-narrative">${escHtml(arc)}</div>
+      </div>` : ''}
+
+      ${functions.length ? `
+      <div class="fm-section">
+        <div class="fm-section-label">Primary Functions</div>
+        <div class="fm-tags">${functions.map(f => `<span class="fm-tag">${escHtml(f.replace(/_/g, ' '))}</span>`).join('')}</div>
+      </div>` : ''}
+
+      ${domainArc.length ? `
+      <div class="fm-section">
+        <div class="fm-section-label">Domain Trajectory</div>
+        <div class="fm-tags fm-arc">${domainArc.map((d, i) =>
+          `<span class="fm-tag">${escHtml(d.replace(/_/g, ' '))}</span>${i < domainArc.length - 1 ? '<span style="color:var(--muted)">→</span>' : ''}`
+        ).join('')}</div>
+      </div>` : ''}
+
+      ${transitionsHTML}
+    </div>`;
 }
 
 function renderEducationTab(education) {
@@ -1024,6 +1237,134 @@ function renderSearchDropdown(results) {
   el.classList.remove('hidden');
 }
 
+// ── Functional Tag Widget ─────────────────────────────────────
+function renderFunctionalTagsWidget(container, tags) {
+  if (!container) return;
+  const et  = container.dataset.entityType;
+  const eid = container.dataset.entityId;
+  const chipsHtml = (tags || []).map(t =>
+    `<span class="ftag-chip" data-tag="${escHtml(t)}">${escHtml(t)}<button class="ftag-chip-remove" data-action="remove-tag" data-tag="${escHtml(t)}" aria-label="Remove ${escHtml(t)}">×</button></span>`
+  ).join('');
+  container.innerHTML = `${chipsHtml}<button class="ftag-add-btn" data-action="open-tag-input">+ tag</button>`;
+}
+
+function openTagInput(container) {
+  const addBtn = container.querySelector('[data-action="open-tag-input"]');
+  if (!addBtn) return;
+  const wrap = document.createElement('span');
+  wrap.className = 'ftag-input-wrap';
+  wrap.innerHTML = `<input class="ftag-input" placeholder="tag…" autocomplete="off" spellcheck="false"><div class="ftag-dropdown hidden"></div>`;
+  addBtn.replaceWith(wrap);
+  const input = wrap.querySelector('.ftag-input');
+  const dropdown = wrap.querySelector('.ftag-dropdown');
+  input.focus();
+
+  let dropItems = [];
+  let selIdx = -1;
+
+  function renderDropdown(items) {
+    dropItems = items;
+    selIdx = -1;
+    if (!items.length) { dropdown.classList.add('hidden'); return; }
+    dropdown.innerHTML = items.map((t, i) =>
+      `<div class="ftag-dropdown-item" data-index="${i}">${escHtml(t)}</div>`
+    ).join('');
+    dropdown.classList.remove('hidden');
+  }
+
+  async function fetchVocab(q) {
+    try {
+      const url = q ? `/api/tags/vocab?q=${encodeURIComponent(q)}` : '/api/tags/vocab';
+      const data = await fetch(url).then(r => r.json());
+      return data.map(v => v.tag_name);
+    } catch { return []; }
+  }
+
+  const debouncedFetch = debounce(async q => renderDropdown(await fetchVocab(q)), 200);
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    if (q.length >= 1) debouncedFetch(q);
+    else fetchVocab('').then(renderDropdown);
+  });
+  input.addEventListener('focus', () => fetchVocab(input.value.trim()).then(renderDropdown));
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selIdx = Math.min(selIdx + 1, dropItems.length - 1);
+      dropdown.querySelectorAll('.ftag-dropdown-item').forEach((el, i) => el.classList.toggle('active', i === selIdx));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selIdx = Math.max(selIdx - 1, -1);
+      dropdown.querySelectorAll('.ftag-dropdown-item').forEach((el, i) => el.classList.toggle('active', i === selIdx));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const val = selIdx >= 0 ? dropItems[selIdx] : input.value.trim();
+      if (val) commitTagInput(container, val);
+    } else if (e.key === 'Escape') {
+      cancelTagInput(container);
+    }
+  });
+
+  dropdown.addEventListener('click', e => {
+    const item = e.target.closest('.ftag-dropdown-item');
+    if (item) commitTagInput(container, dropItems[parseInt(item.dataset.index)]);
+  });
+
+  // Dismiss on outside click
+  setTimeout(() => {
+    function outsideClick(e) {
+      if (!wrap.contains(e.target)) {
+        cancelTagInput(container);
+        document.removeEventListener('click', outsideClick, true);
+      }
+    }
+    document.addEventListener('click', outsideClick, true);
+  }, 0);
+}
+
+function cancelTagInput(container) {
+  const wrap = container.querySelector('.ftag-input-wrap');
+  if (!wrap) return;
+  const btn = document.createElement('button');
+  btn.className = 'ftag-add-btn';
+  btn.dataset.action = 'open-tag-input';
+  btn.textContent = '+ tag';
+  wrap.replaceWith(btn);
+}
+
+async function commitTagInput(container, newTag) {
+  const clean = newTag.trim().toLowerCase();
+  if (!clean) { cancelTagInput(container); return; }
+  const existing = Array.from(container.querySelectorAll('.ftag-chip[data-tag]')).map(el => el.dataset.tag);
+  if (existing.includes(clean)) { cancelTagInput(container); return; }
+  await saveFunctionalTags(container, [...existing, clean]);
+}
+
+async function removeTag(container, tagName) {
+  const existing = Array.from(container.querySelectorAll('.ftag-chip[data-tag]')).map(el => el.dataset.tag);
+  await saveFunctionalTags(container, existing.filter(t => t !== tagName));
+}
+
+async function saveFunctionalTags(container, tags) {
+  const et  = container.dataset.entityType;
+  const eid = container.dataset.entityId;
+  try {
+    const res = await fetch(`/api/tags/${et}/${eid}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags }),
+    });
+    if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+    const data = await res.json();
+    renderFunctionalTagsWidget(container, data.tags || []);
+  } catch (err) {
+    console.error('Functional tag save failed:', err);
+    renderFunctionalTagsWidget(container, tags);
+  }
+}
+
 // ── Event Delegation ──────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // View tabs
@@ -1040,7 +1381,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (orgEl) selectOrg(parseInt(orgEl.dataset.orgId));
   });
 
-  // Main content: profile tabs + person links in org tables
+  // Main content: profile tabs + person links in org tables + functional tags
   document.getElementById('main-content').addEventListener('click', e => {
     const tabBtn = e.target.closest('.profile-tab');
     if (tabBtn) { switchProfileTab(tabBtn.dataset.tab); return; }
@@ -1048,7 +1389,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (personLink) {
       e.preventDefault();
       selectPerson(parseInt(personLink.dataset.personId));
+      return;
     }
+    const addBtn = e.target.closest('[data-action="open-tag-input"]');
+    if (addBtn) { openTagInput(addBtn.closest('.functional-tags-widget')); return; }
+    const removeBtn = e.target.closest('[data-action="remove-tag"]');
+    if (removeBtn) { removeTag(removeBtn.closest('.functional-tags-widget'), removeBtn.dataset.tag); return; }
   });
 
   // Org hover tooltip (delegated on body — catches dynamically rendered org-links)

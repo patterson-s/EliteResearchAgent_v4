@@ -4,7 +4,7 @@ from web.db import get_conn, rows_to_dicts
 from web.models import (
     PersonListResponse, PersonListItem, PersonFilterMeta, PersonDetail,
     CareerPositionItem, EducationItem, AwardItem, HLPItem,
-    PersonAttributeItem, PositionTagItem,
+    PersonAttributeItem, PositionTagItem, PersonNotesRequest,
 )
 
 router = APIRouter()
@@ -54,6 +54,14 @@ def person_filter_meta():
             ORDER BY pa.attribute_value
         """)
         career_typologies = [r[0] for r in cur.fetchall()]
+
+        cur.execute("""
+            SELECT DISTINCT pa.attribute_value
+            FROM prosopography.person_attributes pa
+            WHERE pa.attribute_name = 'functional_summary'
+            ORDER BY pa.attribute_value
+        """)
+        functional_mobility_types = [r[0] for r in cur.fetchall()]
         cur.close()
 
     return PersonFilterMeta(
@@ -62,6 +70,7 @@ def person_filter_meta():
         birth_decades=decades,
         career_domains=career_domains,
         career_typologies=career_typologies,
+        functional_mobility_types=functional_mobility_types,
     )
 
 
@@ -72,6 +81,7 @@ def list_persons(
     birth_decade: Optional[int] = Query(None),
     career_domain: Optional[str] = Query(None),
     career_typology: Optional[str] = Query(None),
+    functional_summary: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     limit: int = Query(100, le=200),
     offset: int = Query(0),
@@ -102,6 +112,11 @@ def list_persons(
             SELECT person_id FROM prosopography.person_attributes
             WHERE attribute_name = 'career_typology' AND attribute_value = %(career_typology)s)""")
         params["career_typology"] = career_typology
+    if functional_summary is not None:
+        where_parts.append("""p.person_id IN (
+            SELECT person_id FROM prosopography.person_attributes
+            WHERE attribute_name = 'functional_summary' AND attribute_value = %(functional_summary)s)""")
+        params["functional_summary"] = functional_summary
     if q is not None:
         where_parts.append("p.display_name ILIKE '%%' || %(q)s || '%%'")
         params["q"] = q
@@ -252,12 +267,48 @@ def get_person(person_id: int):
 
         # 5. Person-level attributes
         cur.execute("""
-            SELECT pa.attribute_name, pa.attribute_value, pa.attribute_label, pa.confidence
+            SELECT pa.attribute_name, pa.attribute_value, pa.attribute_label,
+                   pa.confidence, pa.extra_data
             FROM prosopography.person_attributes pa
             WHERE pa.person_id = %(pid)s AND pa.is_primary = true
             ORDER BY pa.attribute_name
         """, {"pid": person_id})
         attributes = [PersonAttributeItem(**r) for r in rows_to_dicts(cur)]
+
+        # 6. Functional tags (person-level + all positions)
+        person_ftags: list[str] = []
+        position_ftags: dict[int, list[str]] = {}
+
+        cur.execute("""
+            SELECT tags FROM prosopography.user_functional_tags
+            WHERE entity_type = 'person' AND entity_id = %(pid)s
+        """, {"pid": person_id})
+        ftrow = cur.fetchone()
+        if ftrow:
+            person_ftags = ftrow[0] or []
+
+        pos_ids = [p2.position_id for p2 in positions]
+        if pos_ids:
+            cur.execute("""
+                SELECT entity_id, tags FROM prosopography.user_functional_tags
+                WHERE entity_type = 'position' AND entity_id = ANY(%(ids)s::integer[])
+            """, {"ids": pos_ids})
+            for ftrow in cur.fetchall():
+                position_ftags[ftrow[0]] = ftrow[1] or []
+
+        positions = [
+            p2.model_copy(update={"functional_tags": position_ftags.get(p2.position_id, [])})
+            for p2 in positions
+        ]
+
+        # 7. Notes
+        cur.execute("""
+            SELECT note_text FROM prosopography.person_notes
+            WHERE person_id = %(pid)s
+        """, {"pid": person_id})
+        notes_row = cur.fetchone()
+        notes = notes_row[0] if notes_row else None
+
         cur.close()
 
     return PersonDetail(
@@ -275,4 +326,29 @@ def get_person(person_id: int):
         career_positions=positions,
         education=education,
         awards=awards,
+        functional_tags=person_ftags,
+        notes=notes,
     )
+
+
+@router.put("/{person_id}/notes", response_model=dict)
+def upsert_person_notes(person_id: int, body: PersonNotesRequest):
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT 1 FROM prosopography.persons WHERE person_id = %(pid)s
+        """, {"pid": person_id})
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Person not found")
+        cur.execute("""
+            INSERT INTO prosopography.person_notes (person_id, note_text, updated_at)
+            VALUES (%(pid)s, %(text)s, now())
+            ON CONFLICT (person_id) DO UPDATE
+                SET note_text = EXCLUDED.note_text,
+                    updated_at = now()
+            RETURNING updated_at
+        """, {"pid": person_id, "text": body.note_text})
+        updated_at = cur.fetchone()[0]
+        conn.commit()
+        cur.close()
+    return {"person_id": person_id, "updated_at": updated_at.isoformat()}
