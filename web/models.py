@@ -266,6 +266,25 @@ class SectorSummaryResponse(BaseModel):
     items: list[SectorRow]
 
 
+# ── Locations ─────────────────────────────────────────────────────────────────
+
+class LocationItem(BaseModel):
+    city: Optional[str] = None
+    country: str
+    region: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    location_score: int
+    person_count: int
+    position_count: int
+
+class LocationSummaryResponse(BaseModel):
+    level: str
+    total_locations: int
+    total_score: int
+    items: list[LocationItem]
+
+
 # ── Ontology ──────────────────────────────────────────────────────────────────
 
 class OntologyRun(BaseModel):

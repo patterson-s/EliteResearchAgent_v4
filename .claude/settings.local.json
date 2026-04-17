@@ -82,7 +82,12 @@
       "Bash(find \"C:\\\\Users\\\\spatt\\\\Desktop\\\\eliteresearchagent_v4\\\\db\" -name \"migrate_*.py\" -exec grep -l \"io_non_un\\\\|derivative_runs\" {} \\\\;)",
       "Bash(find . -name \"*.py\" -exec grep -l \"org_ontology_io\\\\|org_ontology_executive\" {} \\\\;)",
       "Bash(python:*)",
-      "Bash(PGPASSWORD=\"Cholulasau5!\" psql:*)"
+      "Bash(PGPASSWORD=\"Cholulasau5!\" psql:*)",
+      "Bash(cat \"C:\\\\\\\\Users\\\\\\\\spatt\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\C--Users-spatt-Desktop-eliteresearchagent-v4\\\\\\\\1f412ea2-26ac-44a5-a4af-bb9a33fa0288\\\\\\\\tasks\\\\\\\\bw04hrtxi.output\")",
+      "Bash(uvicorn web.app:app --host 127.0.0.1 --port 8000 --reload)",
+      "Bash(curl -s \"http://127.0.0.1:8000/api/locations/summary?level=city\")",
+      "Bash(curl -s \"http://127.0.0.1:8000/api/locations/summary?level=country\")",
+      "Bash(curl -s \"http://127.0.0.1:8000/\")"
     ]
   }
 }

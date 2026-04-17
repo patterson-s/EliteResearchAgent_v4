@@ -83,6 +83,10 @@ button { cursor: pointer; border: none; background: none; color: inherit; font: 
 .view-tab:hover { color: var(--text); }
 .view-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
+/* ── Locations Map ─────────────────────────────────────────── */
+#locations-map { height: calc(100vh - var(--header-h) - 20px); width: 100%; }
+.loc-legend { padding: 8px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+
 /* ── Filter Panel ──────────────────────────────────────────── */
 #filter-panel {
   padding: 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
@@ -383,6 +387,8 @@ button { cursor: pointer; border: none; background: none; color: inherit; font: 
 .bar-fill { height: 100%; border-radius: 2px; background: var(--accent); }
 .summary-note { font-size: 11px; color: var(--muted); margin-top: 4px; font-style: italic; }
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 <div id="app">
@@ -401,6 +407,7 @@ button { cursor: pointer; border: none; background: none; color: inherit; font: 
         <button class="view-tab active" data-view="persons">Persons</button>
         <button class="view-tab" data-view="organizations">Organizations</button>
         <button class="view-tab" data-view="summary">Summary</button>
+        <button class="view-tab" data-view="locations">Locations</button>
       </nav>
       <div id="filter-panel"></div>
       <div id="sidebar-list"></div>
@@ -551,9 +558,13 @@ const VIEW_HANDLERS = {
   persons:       loadPersonsView,
   organizations: loadOrgsView,
   summary:       loadSummaryView,
+  locations:     loadLocationsView,
 };
 
 async function switchView(view) {
+  if (typeof locationsMap !== 'undefined' && locationsMap) {
+    locationsMap.remove(); locationsMap = null;
+  }
   STATE.view = view;
   STATE.filters = {};
   STATE.selectedPersonId = null;
@@ -1639,6 +1650,69 @@ function renderSummaryTable(subView, data) {
       row.addEventListener('click', () => selectOrg(parseInt(row.dataset.orgId)));
     });
   }
+}
+
+// ── Locations View ────────────────────────────────────────────
+let locationsMap = null;
+const LOCATIONS_CACHE = {};
+
+async function loadLocationsView() {
+  document.getElementById('filter-panel').innerHTML = `
+    <div class="loc-legend">
+      Circle size = career presence score (1 point per position + 1 per year of tenure).
+    </div>`;
+  await loadLocationsSubView('city');
+}
+
+async function loadLocationsSubView(level) {
+  if (!LOCATIONS_CACHE[level]) {
+    LOCATIONS_CACHE[level] = await apiFetch(`/api/locations/summary?level=${level}`);
+  }
+  renderLocationsMap(LOCATIONS_CACHE[level]);
+}
+
+function renderLocationsMap(data) {
+  document.getElementById('sidebar-list').innerHTML = buildLocationsSidebar(data);
+  document.getElementById('main-content').innerHTML = '<div id="locations-map"></div>';
+  if (locationsMap) { locationsMap.remove(); locationsMap = null; }
+
+  setTimeout(() => {
+    const mapEl = document.getElementById('locations-map');
+    if (!mapEl) return;
+    locationsMap = L.map('locations-map', { zoomControl: true }).setView([20, 10], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> &copy; <a href="https://carto.com">CARTO</a>',
+      maxZoom: 19,
+    }).addTo(locationsMap);
+
+    const maxScore = Math.max(...data.items.map(d => d.location_score), 1);
+    data.items.forEach(item => {
+      if (item.lat == null || item.lng == null) return;
+      const r = Math.max(4, Math.min(40, Math.sqrt(item.location_score / maxScore) * 40));
+      const label = item.city ? `<b>${item.city}</b><br>${item.country}` : `<b>${item.country}</b>`;
+      L.circleMarker([item.lat, item.lng], {
+        radius: r,
+        color: '#e94560',
+        fillColor: '#e94560',
+        fillOpacity: 0.65,
+        weight: 1,
+      })
+        .bindPopup(`${label}<br>Score: ${item.location_score}<br>Persons: ${item.person_count}<br>Positions: ${item.position_count}`)
+        .addTo(locationsMap);
+    });
+  }, 0);
+}
+
+function buildLocationsSidebar(data) {
+  if (!data.items.length) return '<div class="empty-state">No location data available.</div>';
+  const rows = data.items.slice(0, 50).map(item => {
+    const name = item.city ? `${item.city}, ${item.country}` : item.country;
+    return `<div class="sidebar-item">
+      <div class="item-name">${name}</div>
+      <div class="item-meta">Score: ${item.location_score} &nbsp;·&nbsp; ${item.person_count} person${item.person_count !== 1 ? 's' : ''}</div>
+    </div>`;
+  }).join('');
+  return `<div class="sidebar-header">Top Locations (${data.total_locations} total)</div>${rows}`;
 }
 
 // ── Event Delegation ──────────────────────────────────────────
