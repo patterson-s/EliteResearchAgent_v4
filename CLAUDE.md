@@ -23,7 +23,7 @@ uvicorn web.app:app --reload --host 127.0.0.1 --port 8000
 
 ## Database Migrations
 
-22 migration scripts in `db/` — safe to re-run (idempotent). Run in order from `migrate_01` through `migrate_22`. `resolve_parent_orgs.py` and `derive_functional_summary.py` are standalone helpers (not sequential migrations).
+23 migration scripts in `db/` — safe to re-run (idempotent). Run in order from `migrate_01` through `migrate_23`. `resolve_parent_orgs.py` and `derive_functional_summary.py` are standalone helpers (not sequential migrations).
 
 Connection config comes from `.env`:
 ```
@@ -48,14 +48,16 @@ web/
     search.py     # GET /api/search/
     ontology.py   # /api/ontology/* — annotation system (11 endpoints, most complex)
     tags.py       # /api/tags/* — user functional tags on persons and positions
+    locations.py  # GET /api/locations/summary — career presence scores by city/country
   static/
-    index.html          # Main explorer UI (persons/orgs/search)
+    index.html          # Main explorer UI (persons/orgs/search/locations); Leaflet map via CDN
     ontology-editor.html  # Manual annotation workflow UI
     ontology-editor-v1.html  # Legacy version
 db/
-  migrate_*.py              # Sequential schema + data migrations (01–22)
+  migrate_*.py              # Sequential schema + data migrations (01–23)
   db_utils.py               # Shared DB connection for migration scripts (returns plain psycopg2 conn)
   enrich_org_locations.py   # Standalone: Serper + Cohere pipeline to populate org location fields
+  geocode_org_locations.py  # Standalone: Nominatim geocoder — populates location_lat/lng on orgs; resumes automatically
   generate_person_pdfs.py   # Standalone: generates static/person_pdfs/*.pdf for all 75 persons
   generate_org_pdf.py       # Standalone: generates static/org_pdfs/organizations.pdf (single doc, all corpus-linked orgs)
 static/
@@ -74,7 +76,7 @@ static/
 **Core data:**
 - `persons` (75 rows) — central entity
 - `career_positions` (~2,183 rows) — one row per job; has `org_id` FK (93.8% matched)
-- `organizations` (2,619 rows) — canonical org registry (1,609 base + 1,010 auto-stubs); has `location_city`, `location_country`, `location_region` columns
+- `organizations` (2,805 rows) — canonical org registry; has `location_city`, `location_country`, `location_region`, `location_lat`, `location_lng` columns; ~1,421 orgs have city/country from Serper+Cohere enrichment (run_id=14); ~344 unique city/country pairs geocoded to lat/lng via `geocode_org_locations.py`
 - `organization_aliases` (209 rows) — alternative names for org resolution
 
 **Analytical derivatives (all provenance-tracked via `derivative_runs`):**
@@ -109,7 +111,7 @@ The ontology editor annotates organizations into three categories (`mfa`, `execu
 - `thematic_tags` — TEXT[] added in migrate_14
 - `parent_org` — TEXT for org-to-org sub-unit relationships, added in migrate_15
 
-Active runs: run_id=5 (MFA, reviewed), run_id=6 (executive, reviewed), run_id=8 (io_non_un, reviewed), run_id=10 (un_agencies, draft — in progress), run_id=14 (org_location_enrichment, reviewed — 1,421 orgs processed). Runs 1–4 are earlier career-tag/typology derivatives (not org ontology).
+Active runs: run_id=5 (MFA, reviewed), run_id=6 (executive, reviewed), run_id=8 (io_non_un, reviewed), run_id=10 (un_agencies, draft — in progress), run_id=14 (org_location_enrichment, reviewed — 1,421 orgs processed). Runs 1–4 are earlier career-tag/typology derivatives (not org ontology). Run IDs are not sequential with migration numbers.
 
 ### Adding a New Annotation Category
 
@@ -141,9 +143,14 @@ cohere>=5
 requests>=2.31
 ```
 
-`xhtml2pdf` is used only by the PDF generation scripts (pure Python, no external binaries). WeasyPrint was evaluated but requires GTK on Windows. `cohere` and `requests` are used only by `db/enrich_org_locations.py`. To regenerate:
+`xhtml2pdf` is used only by the PDF generation scripts (pure Python, no external binaries). WeasyPrint was evaluated but requires GTK on Windows. `cohere` and `requests` are used only by `db/enrich_org_locations.py` and `db/geocode_org_locations.py`. Leaflet.js is loaded from CDN in `index.html` (not a pip dependency). To regenerate:
 - Person PDFs (75 files): `python db/generate_person_pdfs.py`
 - Org PDF (single file): `python db/generate_org_pdf.py`
 - Org locations (Serper + Cohere): `python db/enrich_org_locations.py` — resumes automatically if interrupted; use `--workers N` to tune parallelism; requires `SERPER_API_KEY` and `COHERE_API_KEY` in `.env`
+- Org lat/lng (Nominatim): `python db/geocode_org_locations.py` — resumes from un-geocoded pairs; rate-limited to 1 req/sec; `--dry-run` and `--limit N` flags available
+
+## Locations Tab
+
+The **Locations** tab (`/api/locations/summary`) computes career presence scores by aggregating `career_positions` → `organizations` with location data. Scoring formula: `1 + GREATEST(0, COALESCE(time_finish - time_start, 0))` per position — base 1 for any presence, plus years of tenure. The map uses Leaflet.js with CartoDB Dark Matter tiles and proportional circles (`radius = sqrt(score/max_score) * 40`, clamped 4–40px). Country codes in `organizations.location_country` are ISO alpha-3.
 
 No test suite exists. Validation is done via migration integrity checks and manual UI review.

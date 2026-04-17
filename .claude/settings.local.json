@@ -87,7 +87,14 @@
       "Bash(uvicorn web.app:app --host 127.0.0.1 --port 8000 --reload)",
       "Bash(curl -s \"http://127.0.0.1:8000/api/locations/summary?level=city\")",
       "Bash(curl -s \"http://127.0.0.1:8000/api/locations/summary?level=country\")",
-      "Bash(curl -s \"http://127.0.0.1:8000/\")"
+      "Bash(curl -s \"http://127.0.0.1:8000/\")",
+      "Bash(curl -s -u admin: \"http://127.0.0.1:8000/api/locations/education\")",
+      "Bash(curl -s -u admin: \"http://127.0.0.1:8000/api/locations/trajectory/1\")",
+      "Bash(curl *)",
+      "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
+      "Bash(awk '{print $5}')",
+      "Bash(findstr \":8000\")",
+      "Bash(wmic process *)"
     ]
   }
 }

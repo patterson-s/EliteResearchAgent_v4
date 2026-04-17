@@ -285,6 +285,36 @@ class LocationSummaryResponse(BaseModel):
     items: list[LocationItem]
 
 
+class EducationLocationItem(BaseModel):
+    institution_country: str
+    person_count: int
+    record_count: int
+
+
+class EducationLocationResponse(BaseModel):
+    total_locations: int
+    total_persons: int
+    items: list[EducationLocationItem]
+
+
+class TrajectoryPositionItem(BaseModel):
+    position_id: int
+    title: Optional[str] = None
+    organization: Optional[str] = None
+    org_canonical_name: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    lat: float
+    lng: float
+    time_start: Optional[int] = None
+    time_finish: Optional[int] = None
+
+
+class TrajectoryResponse(BaseModel):
+    person_id: int
+    positions: list[TrajectoryPositionItem]
+
+
 # ── Ontology ──────────────────────────────────────────────────────────────────
 
 class OntologyRun(BaseModel):

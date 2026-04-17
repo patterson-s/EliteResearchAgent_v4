@@ -86,6 +86,19 @@ button { cursor: pointer; border: none; background: none; color: inherit; font: 
 /* ── Locations Map ─────────────────────────────────────────── */
 #locations-map { height: calc(100vh - var(--header-h) - 20px); width: 100%; }
 .loc-legend { padding: 8px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.loc-subview-bar { display: flex; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.loc-subview-btn {
+  padding: 4px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; background: none; border: none; border-bottom: 2px solid transparent;
+  cursor: pointer; color: var(--muted); transition: color .15s, border-color .15s;
+}
+.loc-subview-btn:hover { color: var(--text); }
+.loc-subview-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.loc-person-select { width: 100%; padding: 5px 7px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); margin-bottom: 8px; }
+.loc-stop-list { list-style: none; padding: 0; }
+.loc-stop-item { padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.loc-stop-num { color: var(--accent); font-weight: 700; margin-right: 4px; }
+.loc-stop-year { color: var(--muted); font-size: 11px; }
 
 /* ── Filter Panel ──────────────────────────────────────────── */
 #filter-panel {
@@ -1655,35 +1668,122 @@ function renderSummaryTable(subView, data) {
 // ── Locations View ────────────────────────────────────────────
 let locationsMap = null;
 const LOCATIONS_CACHE = {};
+let _locActiveSubview = 'career';
 
-async function loadLocationsView() {
-  document.getElementById('filter-panel').innerHTML = `
-    <div class="loc-legend">
-      Circle size = career presence score (1 point per position + 1 per year of tenure).
-    </div>`;
-  await loadLocationsSubView('city');
+const LIGHT_TILE_URL  = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const TILE_ATTR       = '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> &copy; <a href="https://carto.com">CARTO</a>';
+const DOT_COLOR       = '#e94560';
+
+// Country name → [lat, lng] centroid lookup for education view
+const COUNTRY_CENTROIDS = {
+  'United States': [37.1, -95.7], 'USA': [37.1, -95.7],
+  'United Kingdom': [54.4, -3.4], 'UK': [54.4, -3.4], 'England': [52.5, -1.5],
+  'France': [46.2, 2.2], 'Germany': [51.2, 10.4], 'Switzerland': [46.8, 8.2],
+  'Italy': [42.5, 12.6], 'Spain': [40.5, -3.7], 'Netherlands': [52.3, 5.3],
+  'Belgium': [50.5, 4.5], 'Sweden': [60.1, 18.6], 'Norway': [60.5, 8.5],
+  'Denmark': [56.3, 9.5], 'Finland': [61.9, 25.7], 'Austria': [47.5, 14.5],
+  'Russia': [61.5, 105.3], 'Soviet Union': [55.8, 37.6],
+  'China': [35.9, 104.2], 'Japan': [36.2, 138.3], 'India': [20.6, 78.9],
+  'Pakistan': [30.4, 69.3], 'Bangladesh': [23.7, 90.4], 'Sri Lanka': [7.9, 80.8],
+  'Egypt': [26.8, 30.8], 'Nigeria': [9.1, 8.7], 'Kenya': [0.0, 37.9],
+  'Ghana': [7.9, -1.0], 'Ethiopia': [9.1, 40.5], 'Tanzania': [-6.4, 34.9],
+  'South Africa': [-28.5, 24.7], 'Zimbabwe': [-19.0, 29.2], 'Uganda': [1.4, 32.3],
+  'Sudan': [12.9, 30.2], 'Morocco': [31.8, -7.1], 'Algeria': [28.0, 1.7],
+  'Tunisia': [33.9, 9.6], 'Libya': [26.3, 17.2],
+  'Brazil': [-14.2, -51.9], 'Argentina': [-38.4, -63.6], 'Chile': [-35.7, -71.5],
+  'Colombia': [4.6, -74.1], 'Mexico': [23.6, -102.6], 'Peru': [-9.2, -75.0],
+  'Venezuela': [6.4, -66.6],
+  'Australia': [-25.3, 133.8], 'New Zealand': [-40.9, 174.9],
+  'Canada': [56.1, -106.3], 'Israel': [31.0, 34.9], 'Turkey': [38.9, 35.2],
+  'Iran': [32.4, 53.7], 'Iraq': [33.2, 43.7], 'Jordan': [31.0, 36.2],
+  'Lebanon': [33.9, 35.9], 'Saudi Arabia': [23.9, 45.1], 'UAE': [23.4, 53.8],
+  'Kuwait': [29.3, 47.5], 'Philippines': [12.9, 121.8], 'Indonesia': [-0.8, 113.9],
+  'Malaysia': [4.2, 108.0], 'Singapore': [1.4, 103.8], 'Thailand': [15.9, 100.9],
+  'Vietnam': [14.1, 108.3], 'South Korea': [35.9, 127.8], 'Taiwan': [23.7, 121.0],
+  'Poland': [51.9, 19.1], 'Czech Republic': [49.8, 15.5], 'Hungary': [47.2, 19.5],
+  'Romania': [45.9, 24.9], 'Bulgaria': [42.7, 25.5], 'Yugoslavia': [44.8, 20.5],
+  'Czechoslovakia': [49.8, 15.5], 'Serbia': [44.0, 21.0],
+};
+
+function makeLocationsSubviewBar(active) {
+  const views = [
+    { key: 'career', label: 'Career Presence' },
+    { key: 'education', label: 'Education' },
+    { key: 'trajectories', label: 'Trajectories' },
+  ];
+  const btns = views.map(v =>
+    `<button class="loc-subview-btn${v.key === active ? ' active' : ''}" data-locview="${v.key}">${v.label}</button>`
+  ).join('');
+  return `<div class="loc-subview-bar">${btns}</div>`;
 }
 
-async function loadLocationsSubView(level) {
-  if (!LOCATIONS_CACHE[level]) {
-    LOCATIONS_CACHE[level] = await apiFetch(`/api/locations/summary?level=${level}`);
+function _locSubviewClickHandler(e) {
+  const btn = e.target.closest('.loc-subview-btn');
+  if (!btn) return;
+  const view = btn.dataset.locview;
+  if (view === _locActiveSubview) return;
+  _locActiveSubview = view;
+  document.querySelectorAll('.loc-subview-btn').forEach(b => b.classList.toggle('active', b.dataset.locview === view));
+  updateLocLegend(view);
+  loadLocationsSubView(view);
+}
+
+async function loadLocationsView() {
+  _locActiveSubview = 'career';
+  const fp = document.getElementById('filter-panel');
+  fp.innerHTML = makeLocationsSubviewBar('career') +
+    `<div class="loc-legend">Circle size = career presence score (1 pt per position + 1 per year of tenure).</div>`;
+  fp.removeEventListener('click', _locSubviewClickHandler);
+  fp.addEventListener('click', _locSubviewClickHandler);
+  await loadLocationsSubView('career');
+}
+
+function updateLocLegend(view) {
+  const legends = {
+    career: 'Circle size = career presence score (1 pt per position + 1 per year of tenure).',
+    education: 'Circle size = number of persons who studied in that country.',
+    trajectories: 'Select a person to trace their career path across locations.',
+  };
+  const el = document.querySelector('.loc-legend');
+  if (el) el.textContent = legends[view] || '';
+}
+
+async function loadLocationsSubView(view) {
+  if (view === 'education') {
+    if (!LOCATIONS_CACHE.education) {
+      LOCATIONS_CACHE.education = await apiFetch('/api/locations/education');
+    }
+    renderEducationMap(LOCATIONS_CACHE.education);
+  } else if (view === 'trajectories') {
+    renderTrajectoriesView();
+  } else {
+    const level = 'city';
+    if (!LOCATIONS_CACHE[level]) {
+      LOCATIONS_CACHE[level] = await apiFetch(`/api/locations/summary?level=${level}`);
+    }
+    renderLocationsMap(LOCATIONS_CACHE[level]);
   }
-  renderLocationsMap(LOCATIONS_CACHE[level]);
+}
+
+function _destroyMap() {
+  if (locationsMap) { locationsMap.remove(); locationsMap = null; }
+}
+
+function _lightMap(elId) {
+  const m = L.map(elId, { zoomControl: true }).setView([20, 10], 2);
+  L.tileLayer(LIGHT_TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(m);
+  return m;
 }
 
 function renderLocationsMap(data) {
   document.getElementById('sidebar-list').innerHTML = buildLocationsSidebar(data);
   document.getElementById('main-content').innerHTML = '<div id="locations-map"></div>';
-  if (locationsMap) { locationsMap.remove(); locationsMap = null; }
+  _destroyMap();
 
   setTimeout(() => {
     const mapEl = document.getElementById('locations-map');
     if (!mapEl) return;
-    locationsMap = L.map('locations-map', { zoomControl: true }).setView([20, 10], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> &copy; <a href="https://carto.com">CARTO</a>',
-      maxZoom: 19,
-    }).addTo(locationsMap);
+    locationsMap = _lightMap('locations-map');
 
     const maxScore = Math.max(...data.items.map(d => d.location_score), 1);
     data.items.forEach(item => {
@@ -1691,11 +1791,7 @@ function renderLocationsMap(data) {
       const r = Math.max(4, Math.min(40, Math.sqrt(item.location_score / maxScore) * 40));
       const label = item.city ? `<b>${item.city}</b><br>${item.country}` : `<b>${item.country}</b>`;
       L.circleMarker([item.lat, item.lng], {
-        radius: r,
-        color: '#e94560',
-        fillColor: '#e94560',
-        fillOpacity: 0.65,
-        weight: 1,
+        radius: r, color: DOT_COLOR, fillColor: DOT_COLOR, fillOpacity: 0.65, weight: 1,
       })
         .bindPopup(`${label}<br>Score: ${item.location_score}<br>Persons: ${item.person_count}<br>Positions: ${item.position_count}`)
         .addTo(locationsMap);
@@ -1713,6 +1809,119 @@ function buildLocationsSidebar(data) {
     </div>`;
   }).join('');
   return `<div class="sidebar-header">Top Locations (${data.total_locations} total)</div>${rows}`;
+}
+
+// ── Education Map ──────────────────────────────────────────────
+function renderEducationMap(data) {
+  const rows = data.items.slice(0, 40).map(item =>
+    `<div class="sidebar-item">
+      <div class="item-name">${item.institution_country}</div>
+      <div class="item-meta">${item.person_count} person${item.person_count !== 1 ? 's' : ''} &nbsp;·&nbsp; ${item.record_count} record${item.record_count !== 1 ? 's' : ''}</div>
+    </div>`
+  ).join('');
+  document.getElementById('sidebar-list').innerHTML =
+    `<div class="sidebar-header">Education Countries (${data.total_locations} total)</div>${rows}`;
+  document.getElementById('main-content').innerHTML = '<div id="locations-map"></div>';
+  _destroyMap();
+
+  setTimeout(() => {
+    const mapEl = document.getElementById('locations-map');
+    if (!mapEl) return;
+    locationsMap = _lightMap('locations-map');
+
+    const maxCount = Math.max(...data.items.map(d => d.person_count), 1);
+    let unmapped = 0;
+    data.items.forEach(item => {
+      const centroid = COUNTRY_CENTROIDS[item.institution_country];
+      if (!centroid) { unmapped++; return; }
+      const r = Math.max(4, Math.min(35, Math.sqrt(item.person_count / maxCount) * 35));
+      L.circleMarker(centroid, {
+        radius: r, color: DOT_COLOR, fillColor: DOT_COLOR, fillOpacity: 0.65, weight: 1,
+      })
+        .bindPopup(`<b>${item.institution_country}</b><br>${item.person_count} person${item.person_count !== 1 ? 's' : ''}<br>${item.record_count} education record${item.record_count !== 1 ? 's' : ''}`)
+        .addTo(locationsMap);
+    });
+    if (unmapped > 0) console.log(`Education map: ${unmapped} country name(s) not in centroid lookup`);
+  }, 0);
+}
+
+// ── Trajectories View ──────────────────────────────────────────
+let _trajMarkers = [];
+let _trajLine = null;
+
+async function renderTrajectoriesView() {
+  if (!LOCATIONS_CACHE.persons) {
+    LOCATIONS_CACHE.persons = await apiFetch('/api/persons/');
+  }
+  const persons = LOCATIONS_CACHE.persons.items || LOCATIONS_CACHE.persons;
+
+  const options = persons.map(p =>
+    `<option value="${p.person_id}">${p.display_name}</option>`
+  ).join('');
+  document.getElementById('sidebar-list').innerHTML =
+    `<div class="sidebar-header">Select a Person</div>
+     <div style="padding:8px 10px">
+       <select class="loc-person-select" id="traj-person-select">
+         <option value="">— choose —</option>${options}
+       </select>
+       <ul class="loc-stop-list" id="traj-stop-list"></ul>
+     </div>`;
+
+  document.getElementById('main-content').innerHTML = '<div id="locations-map"></div>';
+  _destroyMap();
+
+  setTimeout(() => {
+    const mapEl = document.getElementById('locations-map');
+    if (!mapEl) return;
+    locationsMap = _lightMap('locations-map');
+  }, 0);
+
+  document.getElementById('traj-person-select').addEventListener('change', async e => {
+    const pid = e.target.value;
+    if (!pid) return;
+    const data = await apiFetch(`/api/locations/trajectory/${pid}`);
+    _renderTrajectory(data);
+  });
+}
+
+function _renderTrajectory(data) {
+  _trajMarkers.forEach(m => locationsMap.removeLayer(m));
+  if (_trajLine) { locationsMap.removeLayer(_trajLine); _trajLine = null; }
+  _trajMarkers = [];
+
+  const positions = data.positions;
+  if (!positions.length) {
+    document.getElementById('traj-stop-list').innerHTML =
+      '<li style="padding:6px 0;color:var(--muted);font-size:12px">No geocoded positions found.</li>';
+    return;
+  }
+
+  const latlngs = positions.map(p => [p.lat, p.lng]);
+  _trajLine = L.polyline(latlngs, { color: DOT_COLOR, weight: 1.5, opacity: 0.5 }).addTo(locationsMap);
+
+  const circled = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩',
+                   '⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','⑳'];
+  const stopItems = positions.map((p, i) => {
+    const num = i < circled.length ? circled[i] : `(${i + 1})`;
+    const icon = L.divIcon({
+      html: `<div style="background:${DOT_COLOR};color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)">${i + 1}</div>`,
+      className: '', iconSize: [20, 20], iconAnchor: [10, 10],
+    });
+    const loc = p.city ? `${p.city}, ${p.country}` : (p.country || '');
+    const period = p.time_start ? (p.time_finish ? `${p.time_start}–${p.time_finish}` : `${p.time_start}–`) : '';
+    const marker = L.marker([p.lat, p.lng], { icon })
+      .bindPopup(`<b>${p.title || '(no title)'}</b><br>${p.org_canonical_name || p.organization || ''}<br>${loc}${period ? `<br>${period}` : ''}`)
+      .addTo(locationsMap);
+    _trajMarkers.push(marker);
+    return `<li class="loc-stop-item">
+      <span class="loc-stop-num">${num}</span>
+      ${p.title || '(no title)'}
+      ${period ? `<span class="loc-stop-year"> ${period}</span>` : ''}
+      ${loc ? `<br><span style="color:var(--muted);font-size:11px;padding-left:16px">${loc}</span>` : ''}
+    </li>`;
+  });
+  document.getElementById('traj-stop-list').innerHTML = stopItems.join('');
+  locationsMap.fitBounds(_trajLine.getBounds(), { padding: [30, 30] });
 }
 
 // ── Event Delegation ──────────────────────────────────────────
