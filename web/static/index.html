@@ -1757,11 +1757,24 @@ async function loadLocationsSubView(view) {
   } else if (view === 'trajectories') {
     renderTrajectoriesView();
   } else {
-    const level = 'city';
-    if (!LOCATIONS_CACHE[level]) {
-      LOCATIONS_CACHE[level] = await apiFetch(`/api/locations/summary?level=${level}`);
+    // Try city-level (requires geocoded lat/lng in DB); fall back to country-level
+    if (!LOCATIONS_CACHE.city) {
+      try {
+        const d = await apiFetch('/api/locations/summary?level=city');
+        const geocoded = d.items.filter(i => i.lat != null);
+        LOCATIONS_CACHE.city = geocoded.length > 0 ? d : null;
+      } catch (_) {
+        LOCATIONS_CACHE.city = null;
+      }
     }
-    renderLocationsMap(LOCATIONS_CACHE[level]);
+    if (LOCATIONS_CACHE.city) {
+      renderLocationsMap(LOCATIONS_CACHE.city);
+    } else {
+      if (!LOCATIONS_CACHE.country) {
+        LOCATIONS_CACHE.country = await apiFetch('/api/locations/summary?level=country');
+      }
+      renderCareerCountryMap(LOCATIONS_CACHE.country);
+    }
   }
 }
 
@@ -1794,6 +1807,60 @@ function renderLocationsMap(data) {
         radius: r, color: DOT_COLOR, fillColor: DOT_COLOR, fillOpacity: 0.65, weight: 1,
       })
         .bindPopup(`${label}<br>Score: ${item.location_score}<br>Persons: ${item.person_count}<br>Positions: ${item.position_count}`)
+        .addTo(locationsMap);
+    });
+  }, 0);
+}
+
+// Country-level career presence fallback (uses COUNTRY_CENTROIDS, no DB lat/lng needed)
+// ISO alpha-3 → centroid — covers all countries that appear in the organizations table
+const ISO3_CENTROIDS = {
+  USA:[37.1,-95.7], GBR:[54.4,-3.4], FRA:[46.2,2.2], DEU:[51.2,10.4], CHE:[46.8,8.2],
+  ITA:[42.5,12.6], ESP:[40.5,-3.7], NLD:[52.3,5.3], BEL:[50.5,4.5], SWE:[60.1,18.6],
+  NOR:[60.5,8.5], DNK:[56.3,9.5], FIN:[61.9,25.7], AUT:[47.5,14.5], PRT:[39.4,-8.2],
+  GRC:[39.1,22.9], POL:[51.9,19.1], CZE:[49.8,15.5], HUN:[47.2,19.5], ROU:[45.9,24.9],
+  RUS:[61.5,105.3], UKR:[48.4,31.2], TUR:[38.9,35.2], ISR:[31.0,34.9], SAU:[23.9,45.1],
+  ARE:[23.4,53.8], IRN:[32.4,53.7], IRQ:[33.2,43.7], JOR:[31.0,36.2], LBN:[33.9,35.9],
+  EGY:[26.8,30.8], MAR:[31.8,-7.1], DZA:[28.0,1.7], TUN:[33.9,9.6], LBY:[26.3,17.2],
+  NGA:[9.1,8.7], KEN:[0.0,37.9], GHA:[7.9,-1.0], ETH:[9.1,40.5], TZA:[-6.4,34.9],
+  ZAF:[-28.5,24.7], ZWE:[-19.0,29.2], UGA:[1.4,32.3], SDN:[12.9,30.2], CMR:[3.9,11.5],
+  SEN:[14.5,-14.5], CIV:[7.5,-5.5], RWA:[-1.9,29.9], MOZ:[-18.7,35.5], ZMB:[-13.1,27.8],
+  IND:[20.6,78.9], CHN:[35.9,104.2], JPN:[36.2,138.3], KOR:[35.9,127.8], SGP:[1.4,103.8],
+  MYS:[4.2,108.0], THA:[15.9,100.9], IDN:[-0.8,113.9], PHL:[12.9,121.8], VNM:[14.1,108.3],
+  PAK:[30.4,69.3], BGD:[23.7,90.4], LKA:[7.9,80.8], NPL:[28.4,84.1], TWN:[23.7,121.0],
+  AUS:[-25.3,133.8], NZL:[-40.9,174.9], CAN:[56.1,-106.3], MEX:[23.6,-102.6],
+  BRA:[-14.2,-51.9], ARG:[-38.4,-63.6], CHL:[-35.7,-71.5], COL:[4.6,-74.1],
+  PER:[-9.2,-75.0], VEN:[6.4,-66.6], URY:[-32.5,-55.8], BOL:[-16.3,-63.6],
+  CUB:[22.0,-80.0], GTM:[15.8,-90.2], HND:[15.2,-86.2], NIC:[12.9,-85.2],
+  JAM:[18.1,-77.3], TTO:[10.7,-61.2],
+  SWZ:[-26.5,31.5], LSO:[-29.6,28.2], NAM:[-22.3,17.3], BWA:[-22.3,24.7],
+};
+
+function renderCareerCountryMap(data) {
+  const rows = data.items.slice(0, 50).map(item =>
+    `<div class="sidebar-item">
+      <div class="item-name">${item.country}</div>
+      <div class="item-meta">Score: ${item.location_score} &nbsp;·&nbsp; ${item.person_count} person${item.person_count !== 1 ? 's' : ''}</div>
+    </div>`
+  ).join('');
+  document.getElementById('sidebar-list').innerHTML =
+    `<div class="sidebar-header">Top Countries (${data.total_locations} total)</div>${rows}`;
+  document.getElementById('main-content').innerHTML = '<div id="locations-map"></div>';
+  _destroyMap();
+
+  setTimeout(() => {
+    const mapEl = document.getElementById('locations-map');
+    if (!mapEl) return;
+    locationsMap = _lightMap('locations-map');
+    const maxScore = Math.max(...data.items.map(d => d.location_score), 1);
+    data.items.forEach(item => {
+      const centroid = ISO3_CENTROIDS[item.country];
+      if (!centroid) return;
+      const r = Math.max(4, Math.min(40, Math.sqrt(item.location_score / maxScore) * 40));
+      L.circleMarker(centroid, {
+        radius: r, color: DOT_COLOR, fillColor: DOT_COLOR, fillOpacity: 0.65, weight: 1,
+      })
+        .bindPopup(`<b>${item.country}</b><br>Score: ${item.location_score}<br>Persons: ${item.person_count}<br>Positions: ${item.position_count}`)
         .addTo(locationsMap);
     });
   }, 0);
@@ -1879,8 +1946,13 @@ async function renderTrajectoriesView() {
   document.getElementById('traj-person-select').addEventListener('change', async e => {
     const pid = e.target.value;
     if (!pid) return;
-    const data = await apiFetch(`/api/locations/trajectory/${pid}`);
-    _renderTrajectory(data);
+    try {
+      const data = await apiFetch(`/api/locations/trajectory/${pid}`);
+      _renderTrajectory(data);
+    } catch (err) {
+      document.getElementById('traj-stop-list').innerHTML =
+        `<li style="padding:6px 0;color:#e94560;font-size:12px">Error loading trajectory: ${err.message}</li>`;
+    }
   });
 }
 
