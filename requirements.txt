@@ -3,3 +3,4 @@ python-dotenv>=1.0
 fastapi>=0.111
 uvicorn[standard]>=0.29
 xhtml2pdf>=0.2.11
+python-bidi==0.4.2
