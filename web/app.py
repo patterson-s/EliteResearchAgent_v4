@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from web.routers import persons, organizations, search, hlp, ontology, tags, locations
+from web.db import get_conn
 
 SITE_USERNAME = os.environ.get("SITE_USERNAME", "admin")
 SITE_PASSWORD = os.environ.get("SITE_PASSWORD", "")
@@ -69,6 +70,24 @@ app = FastAPI(
     version="1.0.0",
     description="Read-only interface for exploring UN High-Level Panel elites and their career trajectories.",
 )
+
+
+@app.on_event("startup")
+def run_startup_migrations():
+    """Idempotent DDL — safe to run on every deploy."""
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                ALTER TABLE prosopography.organizations
+                    ADD COLUMN IF NOT EXISTS location_lat  DOUBLE PRECISION,
+                    ADD COLUMN IF NOT EXISTS location_lng  DOUBLE PRECISION;
+            """)
+            conn.commit()
+            cur.close()
+        print("[startup] migrate_23 DDL applied (location_lat/lng columns ensured)", flush=True)
+    except Exception as e:
+        print(f"[startup] migration warning: {e}", flush=True)
 
 app.add_middleware(BasicAuthMiddleware)
 
