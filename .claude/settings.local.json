@@ -94,7 +94,9 @@
       "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
       "Bash(awk '{print $5}')",
       "Bash(findstr \":8000\")",
-      "Bash(wmic process *)"
+      "Bash(wmic process *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
